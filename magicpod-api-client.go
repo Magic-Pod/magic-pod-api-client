@@ -56,7 +56,7 @@ func main() {
 				},
 				cli.IntFlag{
 					Name:  "wait_limit, w",
-					Usage: "Wait limit in seconds. If not specified or 0 is specified, the value is test count x 10 minutes",
+					Usage: "Wait limit in seconds. If 0 is specified, the value is test count x 10 minutes",
 				},
 			},
 			Action: BatchRunAction,
@@ -114,7 +114,7 @@ func BatchRunAction(c *cli.Context) error {
 		panic(err)
 	}
 
-	// finish without the test finish
+	// finish before the test finish
 	totalTestCount := startRes.Test_Cases.Total
 	if noWait {
 		fmt.Printf(fmt.Sprintf("test result page: %s\n", startRes.Url))
