@@ -15,38 +15,39 @@ import (
 
 func main() {
 	app := cli.NewApp()
+	app.Version = "0.40.0"
 	app.Name = "magic-pod-api-client"
 	app.Usage = "Simple and useful wrapper for Magic Pod Web API"
 	app.Flags = []cli.Flag{
-        // hidden option only for Magic Pod developers
+		// hidden option only for Magic Pod developers
 		cli.StringFlag{
-			Name: "url-base",
-			Value: "https://magic-pod.com",
+			Name:   "url-base",
+			Value:  "https://magic-pod.com",
 			Hidden: true,
 		},
 	}
 	app.Commands = []cli.Command{
 		{
-			Name: "batch-run",
+			Name:  "batch-run",
 			Usage: "Run batch test",
 			Flags: []cli.Flag{
 				cli.StringFlag{
-					Name: "token, t",
-					Usage: "API token. You can get the value from https://magic-pod.com/accounts/api-token/",
+					Name:   "token, t",
+					Usage:  "API token. You can get the value from https://magic-pod.com/accounts/api-token/",
 					EnvVar: "MAGIC_POD_API_TOKEN",
 				},
 				cli.StringFlag{
-					Name: "organization, o",
-					Usage: "Organization name. (Not \"organization display name\", be careful!)",
+					Name:   "organization, o",
+					Usage:  "Organization name. (Not \"organization display name\", be careful!)",
 					EnvVar: "MAGIC_POD_ORGANIZATION",
 				},
 				cli.StringFlag{
-					Name: "project, p",
-					Usage: "Project name. (Not \"project display name\", be careful!)",
+					Name:   "project, p",
+					Usage:  "Project name. (Not \"project display name\", be careful!)",
 					EnvVar: "MAGIC_POD_PROJECT",
 				},
 				cli.StringFlag{
-					Name: "setting, s",
+					Name:  "setting, s",
 					Usage: "Test setting in JSON format",
 				},
 			},
@@ -57,9 +58,9 @@ func main() {
 }
 
 type BatchRunStartRes struct {
-	Url string
+	Url              string
 	Batch_Run_Number int
-	Test_Cases struct {
+	Test_Cases       struct {
 		Total int
 	}
 }
@@ -74,7 +75,7 @@ func BatchRunAction(c *cli.Context) error {
 	if urlBase == "" {
 		return cli.NewExitError("url-base argument cannot be empty", 1)
 	}
-    apiToken := c.String("token")
+	apiToken := c.String("token")
 	if apiToken == "" {
 		return cli.NewExitError("--token option is required", 1)
 	}
@@ -128,13 +129,13 @@ func BatchRunAction(c *cli.Context) error {
 			} else if getRes.Status == "failed" {
 				return cli.NewExitError("batch run failed", 1)
 			} else if getRes.Status == "aborted" {
-	        	return cli.NewExitError("bartch run aborted", 1)
+				return cli.NewExitError("bartch run aborted", 1)
 			} else {
 				panic(getRes.Status)
 			}
 		}
 		retryCount += 1
-		if (retryCount >= retryLimit) {
+		if retryCount >= retryLimit {
 			return cli.NewExitError("The batch run never finished", 1)
 		}
 		time.Sleep(60 * time.Second)
@@ -148,15 +149,15 @@ func SendHttpRequest(method string, url string, body io.Reader, apiToken string)
 	if err != nil {
 		panic(err)
 	}
-	req.Header.Set("Authorization", "Token " + apiToken)
+	req.Header.Set("Authorization", "Token "+apiToken)
 	req.Header.Set("accept", "application/json")
-    req.Header.Set("Content-Type", "application/json")
-    client := &http.Client{}
-    res, err := client.Do(req)
+	req.Header.Set("Content-Type", "application/json")
+	client := &http.Client{}
+	res, err := client.Do(req)
 	if err != nil {
 		panic(err)
 	}
-    defer res.Body.Close()
+	defer res.Body.Close()
 	resBody, err := ioutil.ReadAll(res.Body)
 	if err != nil {
 		panic(err)
