@@ -74,7 +74,12 @@ type BatchRunStartRes struct {
 }
 
 type BatchRunGetRes struct {
-	Status string
+	Status     string
+	Test_Cases struct {
+		Succeeded int
+		Failed    int
+		Aborted   int
+	}
 }
 
 func BatchRunAction(c *cli.Context) error {
@@ -117,13 +122,13 @@ func BatchRunAction(c *cli.Context) error {
 	// finish before the test finish
 	totalTestCount := startRes.Test_Cases.Total
 	if noWait {
-		fmt.Printf(fmt.Sprintf("test result page: %s\n", startRes.Url))
+		fmt.Printf("test result page: %s\n", startRes.Url)
 		return nil
 	}
 
 	// wait until the batch test is finished
-	fmt.Printf(fmt.Sprintf("wait until %d tests to be finished.. \n", totalTestCount))
-	fmt.Printf(fmt.Sprintf("test result page: %s\n", startRes.Url))
+	fmt.Printf("test result page:\n%s\n\n", startRes.Url)
+	fmt.Printf("wait until %d tests to be finished.. \n", totalTestCount)
 	const retryInterval = 60
 	var limitSeconds int
 	if waitLimit == 0 {
@@ -132,6 +137,7 @@ func BatchRunAction(c *cli.Context) error {
 		limitSeconds = waitLimit
 	}
 	passedSeconds := 0
+	prevFinished := 0
 	for {
 		url := fmt.Sprintf("%s/api/v1.0/%s/%s/batch-run/%d/", urlBase, organization, project, startRes.Batch_Run_Number)
 		getResBody, exitErr := SendHttpRequest("GET", url, nil, apiToken)
@@ -143,12 +149,22 @@ func BatchRunAction(c *cli.Context) error {
 		if err != nil {
 			panic(err)
 		}
+		finished := getRes.Test_Cases.Succeeded + getRes.Test_Cases.Failed + getRes.Test_Cases.Aborted
+		// output progress
+		if finished != prevFinished {
+			if getRes.Test_Cases.Failed > 0 {
+				fmt.Printf("%d/%d finished (%d failed)\n", finished, totalTestCount, getRes.Test_Cases.Failed)
+			} else {
+				fmt.Printf("%d/%d finished\n", finished, totalTestCount)
+			}
+			prevFinished = finished
+		}
 		if getRes.Status != "running" {
 			if getRes.Status == "succeeded" {
 				fmt.Print("batch run succeeded\n")
 				return nil
 			} else if getRes.Status == "failed" {
-				return cli.NewExitError("batch run failed", 1)
+				return cli.NewExitError(fmt.Sprintf("batch run failed (%d failed)", getRes.Test_Cases.Failed), 1)
 			} else if getRes.Status == "aborted" {
 				return cli.NewExitError("bartch run aborted", 1)
 			} else {
