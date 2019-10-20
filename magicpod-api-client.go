@@ -15,7 +15,7 @@ import (
 
 func main() {
 	app := cli.NewApp()
-	app.Version = "0.40.0"
+	app.Version = "0.39.0"
 	app.Name = "magic-pod-api-client"
 	app.Usage = "Simple and useful wrapper for Magic Pod Web API"
 	app.Flags = []cli.Flag{
@@ -49,6 +49,14 @@ func main() {
 				cli.StringFlag{
 					Name:  "setting, s",
 					Usage: "Test setting in JSON format",
+				},
+				cli.BoolFlag{
+					Name:  "no_wait, n",
+					Usage: "Return immediately without waiting the batch run to be finished",
+				},
+				cli.IntFlag{
+					Name:  "wait_limit, w",
+					Usage: "Wait limit in seconds. If not specified or 0 is specified, the value is test count x 10 minutes",
 				},
 			},
 			Action: BatchRunAction,
@@ -91,6 +99,8 @@ func BatchRunAction(c *cli.Context) error {
 	if setting == "" {
 		return cli.NewExitError("--setting option is required", 1)
 	}
+	noWait := c.Bool("no_wait")
+	waitLimit := c.Int("wait_limit")
 
 	// send batch run start request
 	url := fmt.Sprintf("%s/api/v1.0/%s/%s/batch-run/", urlBase, organization, project)
@@ -103,14 +113,25 @@ func BatchRunAction(c *cli.Context) error {
 	if err != nil {
 		panic(err)
 	}
-	fmt.Printf(fmt.Sprintf("%s\n", startResBody))
-	fmt.Printf("new batch run has started\n")
+
+	// finish without the test finish
+	totalTestCount := startRes.Test_Cases.Total
+	if noWait {
+		fmt.Printf(fmt.Sprintf("test result page: %s\n", startRes.Url))
+		return nil
+	}
 
 	// wait until the batch test is finished
-	totalTestCount := startRes.Test_Cases.Total
-	fmt.Printf(fmt.Sprintf("wait until %d tests to be finished.. (%s)\n", totalTestCount, startRes.Url))
-	retryLimit := totalTestCount * 10 // wait up to test count x 10 minutes by default
-	retryCount := 0
+	fmt.Printf(fmt.Sprintf("wait until %d tests to be finished.. \n", totalTestCount))
+	fmt.Printf(fmt.Sprintf("test result page: %s\n", startRes.Url))
+	const retryInterval = 60
+	var limitSeconds int
+	if waitLimit == 0 {
+		limitSeconds = totalTestCount * retryInterval * 10 // wait up to test count x 10 minutes by default
+	} else {
+		limitSeconds = waitLimit
+	}
+	passedSeconds := 0
 	for {
 		url := fmt.Sprintf("%s/api/v1.0/%s/%s/batch-run/%d/", urlBase, organization, project, startRes.Batch_Run_Number)
 		getResBody, exitErr := SendHttpRequest("GET", url, nil, apiToken)
@@ -124,7 +145,7 @@ func BatchRunAction(c *cli.Context) error {
 		}
 		if getRes.Status != "running" {
 			if getRes.Status == "succeeded" {
-				fmt.Print("all tests succeeded\n")
+				fmt.Print("batch run succeeded\n")
 				return nil
 			} else if getRes.Status == "failed" {
 				return cli.NewExitError("batch run failed", 1)
@@ -134,16 +155,16 @@ func BatchRunAction(c *cli.Context) error {
 				panic(getRes.Status)
 			}
 		}
-		retryCount += 1
-		if retryCount >= retryLimit {
-			return cli.NewExitError("The batch run never finished", 1)
+		if passedSeconds > limitSeconds {
+			return cli.NewExitError("batch run never finished", 1)
 		}
-		time.Sleep(60 * time.Second)
+		time.Sleep(retryInterval * time.Second)
+		passedSeconds += retryInterval
 	}
 	return nil
 }
 
-// returrn: (response body or nil, error)
+// return: (response body or nil, error)
 func SendHttpRequest(method string, url string, body io.Reader, apiToken string) ([]byte, *cli.ExitError) {
 	req, err := http.NewRequest(method, url, body)
 	if err != nil {
