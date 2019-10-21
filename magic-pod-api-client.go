@@ -1,16 +1,13 @@
 package main
 
 import (
-	"bytes"
-	"encoding/json"
 	"fmt"
-	"io"
-	"io/ioutil"
-	"net/http"
 	"os"
+	"strconv"
 	"time"
 
 	"github.com/urfave/cli"
+	"gopkg.in/resty.v1"
 )
 
 func main() {
@@ -61,20 +58,15 @@ func main() {
 	app.Run(os.Args)
 }
 
-type BatchRunStartRes struct {
+type BatchRun struct {
 	Url              string
+	Status           string
 	Batch_Run_Number int
 	Test_Cases       struct {
-		Total int
-	}
-}
-
-type BatchRunGetRes struct {
-	Status     string
-	Test_Cases struct {
 		Succeeded int
 		Failed    int
 		Aborted   int
+		Total     int
 	}
 }
 
@@ -109,26 +101,20 @@ func BatchRunAction(c *cli.Context) error {
 	waitLimit := c.Int("wait_limit")
 
 	// send batch run start request
-	url := fmt.Sprintf("%s/api/v1.0/%s/%s/batch-run/", urlBase, organization, project)
-	startResBody, exitErr := SendHttpRequest("POST", url, bytes.NewBuffer([]byte(setting)), apiToken, "application/json")
+	batchRun, exitErr := StartBatchRun(urlBase, apiToken, organization, project, setting)
 	if exitErr != nil {
 		return exitErr
 	}
-	var startRes BatchRunStartRes
-	err = json.Unmarshal(startResBody, &startRes)
-	if err != nil {
-		panic(err)
-	}
 
 	// finish before the test finish
-	totalTestCount := startRes.Test_Cases.Total
+	totalTestCount := batchRun.Test_Cases.Total
 	if noWait {
-		fmt.Printf("test result page: %s\n", startRes.Url)
+		fmt.Printf("test result page: %s\n", batchRun.Url)
 		return nil
 	}
 
 	// wait until the batch test is finished
-	fmt.Printf("test result page:\n%s\n\n", startRes.Url)
+	fmt.Printf("test result page:\n%s\n\n", batchRun.Url)
 	fmt.Printf("wait until %d tests to be finished.. \n", totalTestCount)
 	const retryInterval = 30
 	var limitSeconds int
@@ -140,36 +126,30 @@ func BatchRunAction(c *cli.Context) error {
 	passedSeconds := 0
 	prevFinished := 0
 	for {
-		url := fmt.Sprintf("%s/api/v1.0/%s/%s/batch-run/%d/", urlBase, organization, project, startRes.Batch_Run_Number)
-		getResBody, exitErr := SendHttpRequest("GET", url, nil, apiToken, "application/json")
+		batchRun, exitErr = GetBatchRun(urlBase, apiToken, organization, project, batchRun.Batch_Run_Number)
 		if exitErr != nil {
 			return exitErr // give up the wait here
 		}
-		var getRes BatchRunGetRes
-		err = json.Unmarshal(getResBody, &getRes)
-		if err != nil {
-			panic(err)
-		}
-		finished := getRes.Test_Cases.Succeeded + getRes.Test_Cases.Failed + getRes.Test_Cases.Aborted
+		finished := batchRun.Test_Cases.Succeeded + batchRun.Test_Cases.Failed + batchRun.Test_Cases.Aborted
 		// output progress
 		if finished != prevFinished {
-			if getRes.Test_Cases.Failed > 0 {
-				fmt.Printf("%d/%d finished (%d failed)\n", finished, totalTestCount, getRes.Test_Cases.Failed)
+			if batchRun.Test_Cases.Failed > 0 {
+				fmt.Printf("%d/%d finished (%d failed)\n", finished, totalTestCount, batchRun.Test_Cases.Failed)
 			} else {
 				fmt.Printf("%d/%d finished\n", finished, totalTestCount)
 			}
 			prevFinished = finished
 		}
-		if getRes.Status != "running" {
-			if getRes.Status == "succeeded" {
+		if batchRun.Status != "running" {
+			if batchRun.Status == "succeeded" {
 				fmt.Print("batch run succeeded\n")
 				return nil
-			} else if getRes.Status == "failed" {
-				return cli.NewExitError(fmt.Sprintf("batch run failed (%d failed)", getRes.Test_Cases.Failed), 1)
-			} else if getRes.Status == "aborted" {
+			} else if batchRun.Status == "failed" {
+				return cli.NewExitError(fmt.Sprintf("batch run failed (%d failed)", batchRun.Test_Cases.Failed), 1)
+			} else if batchRun.Status == "aborted" {
 				return cli.NewExitError("bartch run aborted", 1)
 			} else {
-				panic(getRes.Status)
+				panic(batchRun.Status)
 			}
 		}
 		if passedSeconds > limitSeconds {
@@ -179,6 +159,41 @@ func BatchRunAction(c *cli.Context) error {
 		passedSeconds += retryInterval
 	}
 	return nil
+}
+
+func StartBatchRun(urlBase string, apiToken string, organization string, project string, setting string) (*BatchRun, *cli.ExitError) {
+	res, err := CreateBaseRequest(urlBase, apiToken, organization, project).
+		SetHeader("Content-Type", "application/json").
+		SetBody(setting).
+		SetResult(BatchRun{}).
+		Post("/{organization}/{project}/batch-run/")
+	if err != nil {
+		panic(err)
+	}
+	exitErr := HandleError(res)
+	if exitErr != nil {
+		return nil, exitErr
+	} else {
+		return res.Result().(*BatchRun), nil
+	}
+}
+
+func GetBatchRun(urlBase string, apiToken string, organization string, project string, batchRunNumber int) (*BatchRun, *cli.ExitError) {
+	res, err := CreateBaseRequest(urlBase, apiToken, organization, project).
+		SetPathParams(map[string]string{
+			"batch_run_number": strconv.Itoa(batchRunNumber),
+		}).
+		SetResult(BatchRun{}).
+		Get("/{organization}/{project}/batch-run/{batch_run_number}/")
+	if err != nil {
+		panic(err)
+	}
+	exitErr := HandleError(res)
+	if exitErr != nil {
+		return nil, exitErr
+	} else {
+		return res.Result().(*BatchRun), nil
+	}
 }
 
 func CommonFlags() []cli.Flag {
@@ -221,26 +236,20 @@ func ParseCommonFlags(c *cli.Context) (string, string, string, string, error) {
 	return urlBase, apiToken, organization, project, err
 }
 
-// return: (response body or nil, error)
-func SendHttpRequest(method string, url string, body io.Reader, apiToken string, contentType string) ([]byte, *cli.ExitError) {
-	req, err := http.NewRequest(method, url, body)
-	if err != nil {
-		panic(err)
+func CreateBaseRequest(urlBase string, apiToken string, organization string, project string) *resty.Request {
+	return resty.
+		SetHostURL(urlBase+"/api/v1.0").R().
+		SetHeader("Authorization", "Token "+string(apiToken)).
+		SetPathParams(map[string]string{
+			"organization": organization,
+			"project":      project,
+		})
+}
+
+func HandleError(resp *resty.Response) *cli.ExitError {
+	if resp.StatusCode() != 200 {
+		return cli.NewExitError(fmt.Sprintf("%s: %s", resp.Status(), resp.String()), 1)
+	} else {
+		return nil
 	}
-	req.Header.Set("Authorization", "Token "+apiToken)
-	req.Header.Set("Content-Type", contentType)
-	client := &http.Client{}
-	res, err := client.Do(req)
-	if err != nil {
-		panic(err)
-	}
-	defer res.Body.Close()
-	resBody, err := ioutil.ReadAll(res.Body)
-	if err != nil {
-		panic(err)
-	}
-	if res.StatusCode != 200 {
-		return nil, cli.NewExitError(fmt.Sprintf("%s: %s", res.Status, resBody), 1)
-	}
-	return resBody, nil
 }
