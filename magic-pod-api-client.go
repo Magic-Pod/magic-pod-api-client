@@ -4,8 +4,10 @@ import (
 	"fmt"
 	"os"
 	"strconv"
+	"strings"
 	"time"
 
+	"github.com/mholt/archiver"
 	"github.com/urfave/cli"
 	"gopkg.in/resty.v1"
 )
@@ -70,6 +72,10 @@ type BatchRun struct {
 	}
 }
 
+type UploadFile struct {
+	File_No   int
+}
+
 // WIP
 func UploadAppAction(c *cli.Context) error {
 	// handle command line arguments
@@ -82,8 +88,11 @@ func UploadAppAction(c *cli.Context) error {
 		return cli.NewExitError("--app_path option is required", 1)
 	}
 
-	url := fmt.Sprintf("%s/api/v1.0/%s/%s/upload-file/", urlBase, organization, project)
-	fmt.Printf(url + apiToken)
+	fileNo, exitErr := UploadApp(urlBase, apiToken, organization, project, appPath)
+	if exitErr != nil {
+		return exitErr
+	}
+	fmt.Printf("%d\n", fileNo)
 	return nil
 }
 
@@ -170,12 +179,10 @@ func StartBatchRun(urlBase string, apiToken string, organization string, project
 	if err != nil {
 		panic(err)
 	}
-	exitErr := HandleError(res)
-	if exitErr != nil {
+	if exitErr := HandleError(res); exitErr != nil {
 		return nil, exitErr
-	} else {
-		return res.Result().(*BatchRun), nil
 	}
+	return res.Result().(*BatchRun), nil
 }
 
 func GetBatchRun(urlBase string, apiToken string, organization string, project string, batchRunNumber int) (*BatchRun, *cli.ExitError) {
@@ -188,12 +195,49 @@ func GetBatchRun(urlBase string, apiToken string, organization string, project s
 	if err != nil {
 		panic(err)
 	}
-	exitErr := HandleError(res)
-	if exitErr != nil {
+	if exitErr := HandleError(res); exitErr != nil {
 		return nil, exitErr
-	} else {
-		return res.Result().(*BatchRun), nil
 	}
+	return res.Result().(*BatchRun), nil
+}
+
+func UploadApp(urlBase string, apiToken string, organization string, project string, appPath string) (int, *cli.ExitError) {
+	stat, err := os.Stat(appPath)
+	if err != nil {
+		return 0, cli.NewExitError(fmt.Sprintf("%s does not exist", appPath), 1)
+	}
+	var actualPath string
+	if stat.Mode().IsDir() {
+		if strings.HasSuffix(appPath, ".app") {
+			actualPath = ZipAppDir(appPath)
+		} else {
+			return 0, cli.NewExitError(fmt.Sprintf("%s is not file but direcoty.", appPath), 1)
+		}
+	} else {
+		actualPath = appPath
+	}
+	res, err := CreateBaseRequest(urlBase, apiToken, organization, project).
+		SetFile("file", actualPath).
+		SetResult(UploadFile{}).
+		Post("/{organization}/{project}/upload-file/")
+	if err != nil {
+		panic(err)
+	}
+	if exitErr := HandleError(res); exitErr != nil {
+		return 0, exitErr
+	}
+	return res.Result().(*UploadFile).File_No, nil
+}
+
+func ZipAppDir(dirPath string) string {
+	zipPath := dirPath + ".zip"
+	if err := os.RemoveAll(zipPath); err != nil {
+		panic(err)
+	}
+	if err := archiver.Archive([]string{dirPath}, zipPath); err != nil {
+		panic(err)
+	}
+	return zipPath
 }
 
 func CommonFlags() []cli.Flag {
