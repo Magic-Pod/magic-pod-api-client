@@ -22,7 +22,7 @@ FILE_NO=$(./magic-pod-api-client upload-app -a <path to app/ipa/apk>)
 ./magic-pod-api-client batch-run -s "{\"environment\":\"magic_pod\",\"os\":\"ios\",\"device_type\":\"simulator\",\"version\":\"13.1\",\"model\":\"iPhone 8\",\"app_type\":\"app_file\",\"app_file_number\":${FILE_NO}}"
 ```
 
-### Run batch test for the app URL and return immmediately
+### Run batch test for the app URL and return immediately
 
 ```
 ./magic-pod-api-client batch-run -n -t <API token displayed on https://magic-pod.com/accounts/api-token/> -o <organization> -p <project> -s "{\"environment\":\"magic_pod\",\"os\":\"ios\",\"device_type\":\"simulator\",\"version\":\"13.1\",\"model\":\"iPhone 8\",\"app_type\":\"app_url\",\"app_url\":\"<URL to zipped app/ipa/apk>\"}"
