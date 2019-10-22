@@ -1,5 +1,5 @@
 # magic-pod-api-client
-Simple and useful wrapper for Magic Pod Web API
+Simple and useful wrapper for Magic Pod Web API.
 
 ## Install
 
@@ -19,7 +19,7 @@ MAGIC_POD_API_TOKEN=<API token displayed on https://magic-pod.com/accounts/api-t
 MAGIC_POD_ORGANIZATION=<organization>
 MAGIC_POD_PROJECT=<project>
 FILE_NO=$(./magic-pod-api-client upload-app -a <path to app/ipa/apk>)
-./magic-pod-api-client batch-run -s "{\"environment\":\"magic_pod\",\"os\":\"ios\",\"device_type\":\"simulator\",\"version\":\"13.1\",\"model\":\"iPhone 8\",\"app_type\":\"app_file\",\"app_file_number\":\"${FILE_NO}\"}"
+./magic-pod-api-client batch-run -s "{\"environment\":\"magic_pod\",\"os\":\"ios\",\"device_type\":\"simulator\",\"version\":\"13.1\",\"model\":\"iPhone 8\",\"app_type\":\"app_file\",\"app_file_number\":${FILE_NO}}"
 ```
 
 ### Run batch test for the app URL and return immmediately
@@ -30,9 +30,17 @@ FILE_NO=$(./magic-pod-api-client upload-app -a <path to app/ipa/apk>)
 
 ## Build from source
 
-Run the following at the top directory of this repository.
+Run the following in the top directory of this repository.
 
 ```
 go get -d .
-go build magic-pod-api-client.go
+go build
+```
+
+The following is the script to generate 64 bit executables for Mac, Linux, Windows.
+
+```
+GOOS=darwin GOARCH=amd64 go build -o ./out/mac64/magic-pod-api-client
+GOOS=linux GOARCH=amd64 go build -o ./out/linux64/magic-pod-api-client
+GOOS=windows GOARCH=amd64 go build -o ./out/win64/magic-pod-api-client.exe
 ```
