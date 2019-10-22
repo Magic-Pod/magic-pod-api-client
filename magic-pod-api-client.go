@@ -32,7 +32,7 @@ func main() {
 			Flags: append(CommonFlags(), []cli.Flag{
 				cli.StringFlag{
 					Name:  "setting, s",
-					Usage: "Test setting in JSON format",
+					Usage: "Test setting in JSON format. Please check https://magic-pod.com/api/v1.0/doc/ for more detail",
 				},
 				cli.BoolFlag{
 					Name:  "no_wait, n",
@@ -73,10 +73,9 @@ type BatchRun struct {
 }
 
 type UploadFile struct {
-	File_No   int
+	File_No int
 }
 
-// WIP
 func UploadAppAction(c *cli.Context) error {
 	// handle command line arguments
 	urlBase, apiToken, organization, project, err := ParseCommonFlags(c)
@@ -125,10 +124,11 @@ func BatchRunAction(c *cli.Context) error {
 	// wait until the batch test is finished
 	fmt.Printf("test result page:\n%s\n\n", batchRun.Url)
 	fmt.Printf("wait until %d tests to be finished.. \n", totalTestCount)
-	const retryInterval = 30
+	const initRetryInterval = 10 // retry more frequently at first
+	const retryInterval = 60
 	var limitSeconds int
 	if waitLimit == 0 {
-		limitSeconds = totalTestCount * retryInterval * 10 // wait up to test count x 10 minutes by default
+		limitSeconds = totalTestCount * 10 * 60 // wait up to test count x 10 minutes by default
 	} else {
 		limitSeconds = waitLimit
 	}
@@ -164,8 +164,13 @@ func BatchRunAction(c *cli.Context) error {
 		if passedSeconds > limitSeconds {
 			return cli.NewExitError("batch run never finished", 1)
 		}
-		time.Sleep(retryInterval * time.Second)
-		passedSeconds += retryInterval
+		if passedSeconds < 120 {
+			time.Sleep(initRetryInterval * time.Second)
+			passedSeconds += initRetryInterval
+		} else {
+			time.Sleep(retryInterval * time.Second)
+			passedSeconds += retryInterval
+		}
 	}
 	return nil
 }
