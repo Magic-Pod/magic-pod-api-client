@@ -154,7 +154,11 @@ func BatchRunAction(c *cli.Context) error {
 				fmt.Print("batch run succeeded\n")
 				return nil
 			} else if batchRun.Status == "failed" {
-				return cli.NewExitError(fmt.Sprintf("batch run failed (%d failed)", batchRun.Test_Cases.Failed), 1)
+				if batchRun.Test_Cases.Failed > 0 {
+					return cli.NewExitError(fmt.Sprintf("batch run failed (%d failed)", batchRun.Test_Cases.Failed), 1)
+				} else {
+					return cli.NewExitError("batch run failed", 1)
+				}
 			} else if batchRun.Status == "aborted" {
 				return cli.NewExitError("bartch run aborted", 1)
 			} else {
