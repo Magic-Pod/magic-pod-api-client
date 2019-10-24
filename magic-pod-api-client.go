@@ -14,7 +14,7 @@ import (
 
 func main() {
 	app := cli.NewApp()
-	app.Version = "0.39.0"
+	app.Version = "0.39.0.2"
 	app.Name = "magic-pod-api-client"
 	app.Usage = "Simple and useful wrapper for Magic Pod Web API"
 	app.Flags = []cli.Flag{
@@ -140,6 +140,7 @@ func BatchRunAction(c *cli.Context) error {
 			return exitErr // give up the wait here
 		}
 		finished := batchRun.Test_Cases.Succeeded + batchRun.Test_Cases.Failed + batchRun.Test_Cases.Aborted
+		fmt.Printf(".") // show progress to prevent "long time no output" error on CircleCI etc
 		// output progress
 		if finished != prevFinished {
 			if batchRun.Test_Cases.Failed > 0 {
