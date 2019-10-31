@@ -37,10 +37,37 @@ go get -d .
 go build
 ```
 
-The following is the script to generate 64 bit executables for Mac, Linux, Windows.
+The following is the script to generate 64 bit executables and zip files for Mac, Linux, Windows.
 
 ```
-GOOS=darwin GOARCH=amd64 go build -o ./out/mac64/magic-pod-api-client
-GOOS=linux GOARCH=amd64 go build -o ./out/linux64/magic-pod-api-client
-GOOS=windows GOARCH=amd64 go build -o ./out/win64/magic-pod-api-client.exe
+# Mac64
+GOOS=darwin GOARCH=amd64 go build -o out/mac64/magic-pod-api-client
+zip -jq out/mac64_magic-pod-api-client.zip out/mac64/magic-pod-api-client
+
+# Linux64
+GOOS=linux GOARCH=amd64 go build -o out/linux64/magic-pod-api-client
+zip -jq out/linux64_magic-pod-api-client.zip out/linux64/magic-pod-api-client
+
+# Win64
+GOOS=windows GOARCH=amd64 go build -o out/win64/magic-pod-api-client.exe
+zip -jq out/win64_magic-pod-api-client.exe.zip out/win64/magic-pod-api-client.exe
 ```
+
+## Sign and Notarize Mac binary
+
+You need to follow https://g3rv4.com/2019/06/bundling-signing-notarizing-go-application carefully.
+The step is like:
+
+1. Build binaries.
+2. Create app-specific password for the Apple ID.
+3. Run the following on the top directory.
+
+```
+# You can check certificate name by `security find-identity -v`
+codesign -s <certificate name> -v --timestamp --options runtime out/mac64/magic-pod-api-client
+# Zip again
+zip -jq out/mac64_magic-pod-api-client.zip out/mac64/magic-pod-api-client
+# Basically you need to specify app-specific password
+xcrun altool --notarize-app --primary-bundle-id "com.magic-pod.api-client" --username "<Apple ID>" --file out/mac64_magic-pod-api-client.zip
+```
+

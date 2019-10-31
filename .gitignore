@@ -12,3 +12,4 @@
 *.out
 
 magic-pod-api-client
+out/
