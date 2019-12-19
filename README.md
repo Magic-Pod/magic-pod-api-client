@@ -41,7 +41,7 @@ PID1=$!
 ./magic-pod-api-client batch-run -s "{\"environment\":\"magic_pod\",\"os\":\"ios\",\"device_type\":\"simulator\",\"version\":\"13.1\",\"model\":\"iPhone 8\",\"app_type\":\"app_url\",\"app_url\":\"<URL2>\"}" &
 PID2=$!
 
-# return values of wait command will be magic-pod-api-client's return values.
+# return values of the wait commands will be magic-pod-api-client's return values.
 wait $PID1
 wait $PID2
 ```
