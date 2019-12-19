@@ -28,6 +28,23 @@ export MAGIC_POD_PROJECT=<project>
 ./magic-pod-api-client batch-run -n -t <API token displayed on https://magic-pod.com/accounts/api-token/> -o <organization> -p <project> -s "{\"environment\":\"magic_pod\",\"os\":\"ios\",\"device_type\":\"simulator\",\"version\":\"13.1\",\"model\":\"iPhone 8\",\"app_type\":\"app_url\",\"app_url\":\"<URL to zipped app/ipa/apk>\"}"
 ```
 
+### Run 2 batch tests for different app URLs in parallel, and wait until all batch runs are finished
+
+```
+export MAGIC_POD_API_TOKEN=<API token displayed on https://magic-pod.com/accounts/api-token/>
+export MAGIC_POD_ORGANIZATION=<organization>
+export MAGIC_POD_PROJECT=<project>
+
+./magic-pod-api-client batch-run -s "{\"environment\":\"magic_pod\",\"os\":\"ios\",\"device_type\":\"simulator\",\"version\":\"13.1\",\"model\":\"iPhone 8\",\"app_type\":\"app_url\",\"app_url\":\"<URL1>\"}" &
+PID1=$!
+
+./magic-pod-api-client batch-run -s "{\"environment\":\"magic_pod\",\"os\":\"ios\",\"device_type\":\"simulator\",\"version\":\"13.1\",\"model\":\"iPhone 8\",\"app_type\":\"app_url\",\"app_url\":\"<URL2>\"}" &
+PID2=$!
+
+wait $PID1
+wait $PID2
+```
+
 ## Build from source
 
 Run the following in the top directory of this repository.
