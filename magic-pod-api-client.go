@@ -1,6 +1,7 @@
 package main
 
 import (
+	"encoding/json"
 	"fmt"
 	"os"
 	"strconv"
@@ -14,7 +15,7 @@ import (
 
 func main() {
 	app := cli.NewApp()
-	app.Version = "0.40.0.1"
+	app.Version = "0.45.0.1"
 	app.Name = "magic-pod-api-client"
 	app.Usage = "Simple and useful wrapper for Magic Pod Web API"
 	app.Flags = []cli.Flag{
@@ -72,6 +73,10 @@ type BatchRun struct {
 	}
 }
 
+type CrossBatchRun struct {
+	Batch_Runs []BatchRun
+}
+
 type UploadFile struct {
 	File_No int
 }
@@ -109,90 +114,131 @@ func BatchRunAction(c *cli.Context) error {
 	waitLimit := c.Int("wait_limit")
 
 	// send batch run start request
-	batchRun, exitErr := StartBatchRun(urlBase, apiToken, organization, project, setting)
+	batchRuns, exitErr := StartBatchRun(urlBase, apiToken, organization, project, setting)
 	if exitErr != nil {
 		return exitErr
 	}
 
+	crossBatchRunTotalTestCount := 0
+	fmt.Print("test result page:\n")
+	for _, batchRun := range batchRuns {
+		fmt.Printf("%s\n", batchRun.Url)
+		crossBatchRunTotalTestCount += batchRun.Test_Cases.Total
+	}
+
 	// finish before the test finish
-	totalTestCount := batchRun.Test_Cases.Total
 	if noWait {
-		fmt.Printf("test result page: %s\n", batchRun.Url)
 		return nil
 	}
 
-	// wait until the batch test is finished
-	fmt.Printf("test result page:\n%s\n\n", batchRun.Url)
-	fmt.Printf("wait until %d tests to be finished.. \n", totalTestCount)
 	const initRetryInterval = 10 // retry more frequently at first
 	const retryInterval = 60
 	var limitSeconds int
 	if waitLimit == 0 {
-		limitSeconds = totalTestCount * 10 * 60 // wait up to test count x 10 minutes by default
+		limitSeconds = crossBatchRunTotalTestCount * 10 * 60 // wait up to test count x 10 minutes by default
 	} else {
 		limitSeconds = waitLimit
 	}
 	passedSeconds := 0
-	prevFinished := 0
-	for {
-		batchRun, exitErr = GetBatchRun(urlBase, apiToken, organization, project, batchRun.Batch_Run_Number)
-		if exitErr != nil {
-			return exitErr // give up the wait here
-		}
-		finished := batchRun.Test_Cases.Succeeded + batchRun.Test_Cases.Failed + batchRun.Test_Cases.Aborted
-		fmt.Printf(".") // show progress to prevent "long time no output" error on CircleCI etc
-		// output progress
-		if finished != prevFinished {
-			if batchRun.Test_Cases.Failed > 0 {
-				fmt.Printf("%d/%d finished (%d failed)\n", finished, totalTestCount, batchRun.Test_Cases.Failed)
-			} else {
-				fmt.Printf("%d/%d finished\n", finished, totalTestCount)
+	existsErr := false
+	for _, batchRun := range batchRuns {
+		fmt.Printf("\n#%d wait until %d tests to be finished.. \n", batchRun.Batch_Run_Number, batchRun.Test_Cases.Total)
+		prevFinished := 0
+		for {
+			batchRun, exitErr := GetBatchRun(urlBase, apiToken, organization, project, batchRun.Batch_Run_Number)
+			if exitErr != nil {
+				fmt.Print(exitErr)
+				existsErr = true
+				break // give up the wait here
 			}
-			prevFinished = finished
-		}
-		if batchRun.Status != "running" {
-			if batchRun.Status == "succeeded" {
-				fmt.Print("batch run succeeded\n")
-				return nil
-			} else if batchRun.Status == "failed" {
+			finished := batchRun.Test_Cases.Succeeded + batchRun.Test_Cases.Failed + batchRun.Test_Cases.Aborted
+			fmt.Printf(".") // show progress to prevent "long time no output" error on CircleCI etc
+			// output progress
+			if finished != prevFinished {
 				if batchRun.Test_Cases.Failed > 0 {
-					return cli.NewExitError(fmt.Sprintf("batch run failed (%d failed)", batchRun.Test_Cases.Failed), 1)
+					fmt.Printf("%d/%d finished (%d failed)\n", finished, batchRun.Test_Cases.Total, batchRun.Test_Cases.Failed)
 				} else {
-					return cli.NewExitError("batch run failed", 1)
+					fmt.Printf("%d/%d finished\n", finished, batchRun.Test_Cases.Total)
 				}
-			} else if batchRun.Status == "aborted" {
-				return cli.NewExitError("bartch run aborted", 1)
+				prevFinished = finished
+			}
+			if batchRun.Status != "running" {
+				if batchRun.Status == "succeeded" {
+					fmt.Print("batch run succeeded\n")
+					break
+				} else if batchRun.Status == "failed" {
+					if batchRun.Test_Cases.Failed > 0 {
+						fmt.Printf("batch run failed (%d failed)\n", batchRun.Test_Cases.Failed)
+					} else {
+						fmt.Print("batch run failed\n")
+					}
+					existsErr = true
+					break
+				} else if batchRun.Status == "aborted" {
+					fmt.Print("batch run aborted\n")
+					existsErr = true
+					break
+				} else {
+					panic(batchRun.Status)
+				}
+			}
+			if passedSeconds > limitSeconds {
+				return cli.NewExitError("batch run never finished", 1)
+			}
+			if passedSeconds < 120 {
+				time.Sleep(initRetryInterval * time.Second)
+				passedSeconds += initRetryInterval
 			} else {
-				panic(batchRun.Status)
+				time.Sleep(retryInterval * time.Second)
+				passedSeconds += retryInterval
 			}
 		}
-		if passedSeconds > limitSeconds {
-			return cli.NewExitError("batch run never finished", 1)
-		}
-		if passedSeconds < 120 {
-			time.Sleep(initRetryInterval * time.Second)
-			passedSeconds += initRetryInterval
-		} else {
-			time.Sleep(retryInterval * time.Second)
-			passedSeconds += retryInterval
-		}
+	}
+	if existsErr {
+		return cli.NewExitError("", 1)
 	}
 	return nil
 }
 
-func StartBatchRun(urlBase string, apiToken string, organization string, project string, setting string) (*BatchRun, *cli.ExitError) {
-	res, err := CreateBaseRequest(urlBase, apiToken, organization, project).
-		SetHeader("Content-Type", "application/json").
-		SetBody(setting).
-		SetResult(BatchRun{}).
-		Post("/{organization}/{project}/batch-run/")
-	if err != nil {
-		panic(err)
+func StartBatchRun(urlBase string, apiToken string, organization string, project string, setting string) ([]BatchRun, *cli.ExitError) {
+	var testSettings interface{}
+	err := json.Unmarshal([]byte(setting), &testSettings)
+	isCrossBatchRunSetting := false
+	if err == nil {
+		testSettingsMap, ok := testSettings.(map[string]interface{})
+		if ok {
+			_, isCrossBatchRunSetting = testSettingsMap["test_settings"]
+		}
 	}
-	if exitErr := HandleError(res); exitErr != nil {
-		return nil, exitErr
+	if isCrossBatchRunSetting {
+		res, err := CreateBaseRequest(urlBase, apiToken, organization, project).
+			SetHeader("Content-Type", "application/json").
+			SetBody(setting).
+			SetResult(CrossBatchRun{}).
+			Post("/{organization}/{project}/cross-batch-run/")
+		if err != nil {
+			panic(err)
+		}
+		if exitErr := HandleError(res); exitErr != nil {
+			return []BatchRun{}, exitErr
+		}
+		crossBatchRun := res.Result().(*CrossBatchRun)
+		return crossBatchRun.Batch_Runs, nil
+	} else { // normal batch run
+		res, err := CreateBaseRequest(urlBase, apiToken, organization, project).
+			SetHeader("Content-Type", "application/json").
+			SetBody(setting).
+			SetResult(BatchRun{}).
+			Post("/{organization}/{project}/batch-run/")
+		if err != nil {
+			panic(err)
+		}
+		if exitErr := HandleError(res); exitErr != nil {
+			return []BatchRun{}, exitErr
+		}
+		batchRun := res.Result().(*BatchRun)
+		return []BatchRun{*batchRun}, nil
 	}
-	return res.Result().(*BatchRun), nil
 }
 
 func GetBatchRun(urlBase string, apiToken string, organization string, project string, batchRunNumber int) (*BatchRun, *cli.ExitError) {

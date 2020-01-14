@@ -28,6 +28,12 @@ export MAGIC_POD_PROJECT=<project>
 ./magic-pod-api-client batch-run -n -t <API token displayed on https://magic-pod.com/accounts/api-token/> -o <organization> -p <project> -s "{\"environment\":\"magic_pod\",\"os\":\"ios\",\"device_type\":\"simulator\",\"version\":\"13.1\",\"model\":\"iPhone 8\",\"app_type\":\"app_url\",\"app_url\":\"<URL to zipped app/ipa/apk>\"}"
 ```
 
+### Run a multi-device pattern for the app URL, and wait until all batch runs are finished
+
+```
+./magic-pod-api-client batch-run -n -t <API token displayed on https://magic-pod.com/accounts/api-token/> -o <organization> -p <project> -s "{\"test_settings\":[{\"environment\":\"magic_pod\",\"os\":\"ios\",\"device_type\":\"simulator\",\"version\":\"13.1\",\"model\":\"iPhone 8\",\"app_type\":\"app_url\",\"app_url\":\"<URL to zipped app/ipa/apk>\"},{\"environment\":\"magic_pod\",\"os\":\"ios\",\"device_type\":\"simulator\",\"version\":\"13.1\",\"model\":\"iPhone X\",\"app_type\":\"app_url\",\"app_url\":\"<URL to zipped app/ipa/apk>\"}]\,\"concurrency\": 1}"
+```
+
 ### Run 2 batch tests for different app URLs in parallel, and wait until all batch runs are finished
 
 ```
@@ -77,8 +83,9 @@ You need to follow https://g3rv4.com/2019/06/bundling-signing-notarizing-go-appl
 The step is like:
 
 1. Build binaries.
-2. Create app-specific password for the Apple ID.
+2. Create app-specific password for the Apple ID according to [this article](https://support.apple.com/en-us/HT204397).
 3. Run the following on the top directory.
+4. After a while, you will receive an e-mail that notifies you that the notarization process has finished.
 
 ```
 # You can check certificate name by `security find-identity -v`
@@ -88,4 +95,3 @@ zip -jq out/mac64_magic-pod-api-client.zip out/mac64/magic-pod-api-client
 # Basically you need to specify app-specific password
 xcrun altool --notarize-app --primary-bundle-id "com.magic-pod.api-client" --username "<Apple ID>" --file out/mac64_magic-pod-api-client.zip
 ```
-
