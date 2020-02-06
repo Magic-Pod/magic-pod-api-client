@@ -8,9 +8,9 @@ import (
 	"strings"
 	"time"
 
+	"github.com/go-resty/resty"
 	"github.com/mholt/archiver"
 	"github.com/urfave/cli"
-	"gopkg.in/resty.v1"
 )
 
 func main() {
@@ -57,6 +57,17 @@ func main() {
 			}...),
 			Action: UploadAppAction,
 		},
+		{
+			Name:  "delete-app",
+			Usage: "Deleted uploaded app/ipa/apk file",
+			Flags: append(CommonFlags(), []cli.Flag{
+				cli.IntFlag{
+					Name:  "app_file_number, a",
+					Usage: "File number of the uploaded file",
+				},
+			}...),
+			Action: DeleteAppAction,
+		},
 	}
 	app.Run(os.Args)
 }
@@ -97,6 +108,23 @@ func UploadAppAction(c *cli.Context) error {
 		return exitErr
 	}
 	fmt.Printf("%d\n", fileNo)
+	return nil
+}
+
+func DeleteAppAction(c *cli.Context) error {
+	// handle command line arguments
+	urlBase, apiToken, organization, project, err := ParseCommonFlags(c)
+	if err != nil {
+		return err
+	}
+	appFileNumber := c.Int("app_file_number")
+	if appFileNumber == 0 {
+		return cli.NewExitError("--app_file_number option is not specified or 0", 1)
+	}
+	exitErr := DeleteApp(urlBase, apiToken, organization, project, appFileNumber)
+	if exitErr != nil {
+		return exitErr
+	}
 	return nil
 }
 
@@ -285,6 +313,19 @@ func UploadApp(urlBase string, apiToken string, organization string, project str
 	return res.Result().(*UploadFile).File_No, nil
 }
 
+func DeleteApp(urlBase string, apiToken string, organization string, project string, appFileNumber int) *cli.ExitError {
+	res, err := CreateBaseRequest(urlBase, apiToken, organization, project).
+		SetBody(fmt.Sprintf("{\"app_file_number\":%d}", appFileNumber)).
+		Delete("/{organization}/{project}/delete-file/")
+	if err != nil {
+		panic(err)
+	}
+	if exitErr := HandleError(res); exitErr != nil {
+		return exitErr
+	}
+	return nil
+}
+
 func ZipAppDir(dirPath string) string {
 	zipPath := dirPath + ".zip"
 	if err := os.RemoveAll(zipPath); err != nil {
@@ -337,7 +378,8 @@ func ParseCommonFlags(c *cli.Context) (string, string, string, string, error) {
 }
 
 func CreateBaseRequest(urlBase string, apiToken string, organization string, project string) *resty.Request {
-	return resty.
+	client := resty.New()
+	return client.
 		SetHostURL(urlBase+"/api/v1.0").R().
 		SetHeader("Authorization", "Token "+string(apiToken)).
 		SetPathParams(map[string]string{
