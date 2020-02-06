@@ -12,14 +12,17 @@ Download the latest magic-pod-api-client executable from [here](https://github.c
 
 ## Examples
 
-### Upload app, run batch test for the app, and wait until the batch run is finished
+### Upload app, run batch test for the app, wait until the batch run is finished, and delete the app if the test passed.
 
 ```
 export MAGIC_POD_API_TOKEN=<API token displayed on https://magic-pod.com/accounts/api-token/>
 export MAGIC_POD_ORGANIZATION=<organization>
 export MAGIC_POD_PROJECT=<project>
-./magic-pod-api-client upload-app -a <path to app/ipa/apk>
-./magic-pod-api-client batch-run -s "{\"environment\":\"magic_pod\",\"os\":\"ios\",\"device_type\":\"simulator\",\"version\":\"13.1\",\"model\":\"iPhone 8\",\"app_type\":\"app_file\",\"app_file_number\":\"latest\"}"
+FILE_NO=$(./magic-pod-api-client upload-app -a <path to app/ipa/apk>)
+./magic-pod-api-client batch-run -s "{\"environment\":\"magic_pod\",\"os\":\"ios\",\"device_type\":\"simulator\",\"version\":\"13.1\",\"model\":\"iPhone 8\",\"app_type\":\"app_file\",\"app_file_number\":\"${FILE_NO}\"}"
+if [ $? = 0 ];
+  ./magic-pod-api-client delete-app -a ${FILE_NO}
+fi
 ```
 
 ### Run batch test for the app URL and return immediately
