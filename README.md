@@ -12,6 +12,11 @@ Download the latest magic-pod-api-client executable from [here](https://github.c
 
 ## Examples
 
+In any cases below, you can check the test result status programatically by magic-pod-api-client's return values.
+- 0: Succeeded
+- 1: Failed
+- 2: Unresolved (Self-healing happened)
+
 ### Upload app, run batch test for the app, wait until the batch run is finished, and delete the app if the test passed.
 
 ```
