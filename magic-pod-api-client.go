@@ -77,10 +77,11 @@ type BatchRun struct {
 	Status           string
 	Batch_Run_Number int
 	Test_Cases       struct {
-		Succeeded int
-		Failed    int
-		Aborted   int
-		Total     int
+		Succeeded 	int
+		Failed    	int
+		Aborted   	int
+		Unresolved	int
+		Total     	int
 	}
 }
 
@@ -169,6 +170,7 @@ func BatchRunAction(c *cli.Context) error {
 	}
 	passedSeconds := 0
 	existsErr := false
+	existsUnresolved := false
 	for _, batchRun := range batchRuns {
 		fmt.Printf("\n#%d wait until %d tests to be finished.. \n", batchRun.Batch_Run_Number, batchRun.Test_Cases.Total)
 		prevFinished := 0
@@ -179,28 +181,47 @@ func BatchRunAction(c *cli.Context) error {
 				existsErr = true
 				break // give up the wait here
 			}
-			finished := batchRun.Test_Cases.Succeeded + batchRun.Test_Cases.Failed + batchRun.Test_Cases.Aborted
+			finished := batchRun.Test_Cases.Succeeded + batchRun.Test_Cases.Failed + batchRun.Test_Cases.Aborted + batchRun.Test_Cases.Unresolved
 			fmt.Printf(".") // show progress to prevent "long time no output" error on CircleCI etc
 			// output progress
 			if finished != prevFinished {
+				notSuccessfulCount := ""
 				if batchRun.Test_Cases.Failed > 0 {
-					fmt.Printf("%d/%d finished (%d failed)\n", finished, batchRun.Test_Cases.Total, batchRun.Test_Cases.Failed)
-				} else {
-					fmt.Printf("%d/%d finished\n", finished, batchRun.Test_Cases.Total)
+					notSuccessfulCount = fmt.Sprintf("%d failed", batchRun.Test_Cases.Failed)
 				}
+				if batchRun.Test_Cases.Unresolved > 0 {
+					if notSuccessfulCount != "" {
+						notSuccessfulCount += ", "
+					}
+					notSuccessfulCount += fmt.Sprintf("%d unresolved", batchRun.Test_Cases.Unresolved)
+				}
+				if notSuccessfulCount != "" {
+					notSuccessfulCount = fmt.Sprintf(" (%s)", notSuccessfulCount)
+				}
+				fmt.Printf("%d/%d finished%s\n", finished, batchRun.Test_Cases.Total, notSuccessfulCount)
 				prevFinished = finished
 			}
 			if batchRun.Status != "running" {
+				if batchRun.Test_Cases.Unresolved > 0 {
+					existsUnresolved = true
+				}
 				if batchRun.Status == "succeeded" {
 					fmt.Print("batch run succeeded\n")
 					break
 				} else if batchRun.Status == "failed" {
 					if batchRun.Test_Cases.Failed > 0 {
-						fmt.Printf("batch run failed (%d failed)\n", batchRun.Test_Cases.Failed)
+						unresolved := ""
+						if existsUnresolved {
+							unresolved = fmt.Sprintf(", %d unresolved", batchRun.Test_Cases.Unresolved)
+						}
+						fmt.Printf("batch run failed (%d failed%s)\n", batchRun.Test_Cases.Failed, unresolved)
 					} else {
 						fmt.Print("batch run failed\n")
 					}
 					existsErr = true
+					break
+				} else if batchRun.Status == "unresolved" {
+					fmt.Printf("batch run unresolved (%d unresolved)\n", batchRun.Test_Cases.Unresolved)
 					break
 				} else if batchRun.Status == "aborted" {
 					fmt.Print("batch run aborted\n")
@@ -224,6 +245,9 @@ func BatchRunAction(c *cli.Context) error {
 	}
 	if existsErr {
 		return cli.NewExitError("", 1)
+	}
+	if existsUnresolved {
+		return cli.NewExitError("", 2)
 	}
 	return nil
 }
