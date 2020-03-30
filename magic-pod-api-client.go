@@ -95,7 +95,7 @@ type UploadFile struct {
 
 func UploadAppAction(c *cli.Context) error {
 	// handle command line arguments
-	urlBase, apiToken, organization, project, err := ParseCommonFlags(c)
+	urlBase, apiToken, organization, project, httpHeadersMap, err := ParseCommonFlags(c)
 	if err != nil {
 		return err
 	}
@@ -104,7 +104,7 @@ func UploadAppAction(c *cli.Context) error {
 		return cli.NewExitError("--app_path option is required", 1)
 	}
 
-	fileNo, exitErr := UploadApp(urlBase, apiToken, organization, project, appPath)
+	fileNo, exitErr := UploadApp(urlBase, apiToken, organization, project, httpHeadersMap, appPath)
 	if exitErr != nil {
 		return exitErr
 	}
@@ -114,7 +114,7 @@ func UploadAppAction(c *cli.Context) error {
 
 func DeleteAppAction(c *cli.Context) error {
 	// handle command line arguments
-	urlBase, apiToken, organization, project, err := ParseCommonFlags(c)
+	urlBase, apiToken, organization, project, httpHeadersMap, err := ParseCommonFlags(c)
 	if err != nil {
 		return err
 	}
@@ -122,7 +122,7 @@ func DeleteAppAction(c *cli.Context) error {
 	if appFileNumber == 0 {
 		return cli.NewExitError("--app_file_number option is not specified or 0", 1)
 	}
-	exitErr := DeleteApp(urlBase, apiToken, organization, project, appFileNumber)
+	exitErr := DeleteApp(urlBase, apiToken, organization, project, httpHeadersMap, appFileNumber)
 	if exitErr != nil {
 		return exitErr
 	}
@@ -131,7 +131,7 @@ func DeleteAppAction(c *cli.Context) error {
 
 func BatchRunAction(c *cli.Context) error {
 	// handle command line arguments
-	urlBase, apiToken, organization, project, err := ParseCommonFlags(c)
+	urlBase, apiToken, organization, project, httpHeadersMap, err := ParseCommonFlags(c)
 	if err != nil {
 		return err
 	}
@@ -143,7 +143,7 @@ func BatchRunAction(c *cli.Context) error {
 	waitLimit := c.Int("wait_limit")
 
 	// send batch run start request
-	batchRuns, exitErr := StartBatchRun(urlBase, apiToken, organization, project, setting)
+	batchRuns, exitErr := StartBatchRun(urlBase, apiToken, organization, project, httpHeadersMap, setting)
 	if exitErr != nil {
 		return exitErr
 	}
@@ -175,7 +175,7 @@ func BatchRunAction(c *cli.Context) error {
 		fmt.Printf("\n#%d wait until %d tests to be finished.. \n", batchRun.Batch_Run_Number, batchRun.Test_Cases.Total)
 		prevFinished := 0
 		for {
-			batchRun, exitErr := GetBatchRun(urlBase, apiToken, organization, project, batchRun.Batch_Run_Number)
+			batchRun, exitErr := GetBatchRun(urlBase, apiToken, organization, project, httpHeadersMap, batchRun.Batch_Run_Number)
 			if exitErr != nil {
 				fmt.Print(exitErr)
 				existsErr = true
@@ -252,7 +252,7 @@ func BatchRunAction(c *cli.Context) error {
 	return nil
 }
 
-func StartBatchRun(urlBase string, apiToken string, organization string, project string, setting string) ([]BatchRun, *cli.ExitError) {
+func StartBatchRun(urlBase string, apiToken string, organization string, project string, httpHeadersMap map[string]string, setting string) ([]BatchRun, *cli.ExitError) {
 	var testSettings interface{}
 	err := json.Unmarshal([]byte(setting), &testSettings)
 	isCrossBatchRunSetting := false
@@ -263,7 +263,7 @@ func StartBatchRun(urlBase string, apiToken string, organization string, project
 		}
 	}
 	if isCrossBatchRunSetting {
-		res, err := CreateBaseRequest(urlBase, apiToken, organization, project).
+		res, err := CreateBaseRequest(urlBase, apiToken, organization, project, httpHeadersMap).
 			SetHeader("Content-Type", "application/json").
 			SetBody(setting).
 			SetResult(CrossBatchRun{}).
@@ -277,7 +277,7 @@ func StartBatchRun(urlBase string, apiToken string, organization string, project
 		crossBatchRun := res.Result().(*CrossBatchRun)
 		return crossBatchRun.Batch_Runs, nil
 	} else { // normal batch run
-		res, err := CreateBaseRequest(urlBase, apiToken, organization, project).
+		res, err := CreateBaseRequest(urlBase, apiToken, organization, project, httpHeadersMap).
 			SetHeader("Content-Type", "application/json").
 			SetBody(setting).
 			SetResult(BatchRun{}).
@@ -293,8 +293,8 @@ func StartBatchRun(urlBase string, apiToken string, organization string, project
 	}
 }
 
-func GetBatchRun(urlBase string, apiToken string, organization string, project string, batchRunNumber int) (*BatchRun, *cli.ExitError) {
-	res, err := CreateBaseRequest(urlBase, apiToken, organization, project).
+func GetBatchRun(urlBase string, apiToken string, organization string, project string, httpHeadersMap map[string]string, batchRunNumber int) (*BatchRun, *cli.ExitError) {
+	res, err := CreateBaseRequest(urlBase, apiToken, organization, project, httpHeadersMap).
 		SetPathParams(map[string]string{
 			"batch_run_number": strconv.Itoa(batchRunNumber),
 		}).
@@ -309,7 +309,7 @@ func GetBatchRun(urlBase string, apiToken string, organization string, project s
 	return res.Result().(*BatchRun), nil
 }
 
-func UploadApp(urlBase string, apiToken string, organization string, project string, appPath string) (int, *cli.ExitError) {
+func UploadApp(urlBase string, apiToken string, organization string, project string, httpHeadersMap map[string]string, appPath string) (int, *cli.ExitError) {
 	stat, err := os.Stat(appPath)
 	if err != nil {
 		return 0, cli.NewExitError(fmt.Sprintf("%s does not exist", appPath), 1)
@@ -324,7 +324,7 @@ func UploadApp(urlBase string, apiToken string, organization string, project str
 	} else {
 		actualPath = appPath
 	}
-	res, err := CreateBaseRequest(urlBase, apiToken, organization, project).
+	res, err := CreateBaseRequest(urlBase, apiToken, organization, project, httpHeadersMap).
 		SetFile("file", actualPath).
 		SetResult(UploadFile{}).
 		Post("/{organization}/{project}/upload-file/")
@@ -337,8 +337,8 @@ func UploadApp(urlBase string, apiToken string, organization string, project str
 	return res.Result().(*UploadFile).File_No, nil
 }
 
-func DeleteApp(urlBase string, apiToken string, organization string, project string, appFileNumber int) *cli.ExitError {
-	res, err := CreateBaseRequest(urlBase, apiToken, organization, project).
+func DeleteApp(urlBase string, apiToken string, organization string, project string, httpHeadersMap map[string]string, appFileNumber int) *cli.ExitError {
+	res, err := CreateBaseRequest(urlBase, apiToken, organization, project, httpHeadersMap).
 		SetBody(fmt.Sprintf("{\"app_file_number\":%d}", appFileNumber)).
 		Delete("/{organization}/{project}/delete-file/")
 	if err != nil {
@@ -378,14 +378,19 @@ func CommonFlags() []cli.Flag {
 			Usage:  "Project name. (Not \"project display name\", be careful!)",
 			EnvVar: "MAGIC_POD_PROJECT",
 		},
+		cli.StringFlag{
+			Name:   "http_headers, H",
+			Usage:  "Additional HTTP headers in JSON string format",
+		},
 	}
 }
 
-func ParseCommonFlags(c *cli.Context) (string, string, string, string, error) {
+func ParseCommonFlags(c *cli.Context) (string, string, string, string, map[string]string, error) {
 	urlBase := c.GlobalString("url-base")
 	apiToken := c.String("token")
 	organization := c.String("organization")
 	project := c.String("project")
+	httpHeadersMap := make(map[string]string)
 	var err error
 	if urlBase == "" {
 		err = cli.NewExitError("url-base argument cannot be empty", 1)
@@ -397,15 +402,23 @@ func ParseCommonFlags(c *cli.Context) (string, string, string, string, error) {
 		err = cli.NewExitError("--project option is required", 1)
 	} else {
 		err = nil
+		httpHeadersStr := c.String("http_headers")
+		if httpHeadersStr != "" {
+			err = json.Unmarshal([]byte(httpHeadersStr), &httpHeadersMap)
+			if err != nil {
+				err = cli.NewExitError("http headers must be in JSON string format whose keys and values are string", 1)
+			}
+		}
 	}
-	return urlBase, apiToken, organization, project, err
+	return urlBase, apiToken, organization, project, httpHeadersMap, err
 }
 
-func CreateBaseRequest(urlBase string, apiToken string, organization string, project string) *resty.Request {
+func CreateBaseRequest(urlBase string, apiToken string, organization string, project string, httpHeadersMap map[string]string) *resty.Request {
 	client := resty.New()
 	return client.
 		SetHostURL(urlBase+"/api/v1.0").R().
 		SetHeader("Authorization", "Token "+string(apiToken)).
+		SetHeaders(httpHeadersMap).
 		SetPathParams(map[string]string{
 			"organization": organization,
 			"project":      project,
