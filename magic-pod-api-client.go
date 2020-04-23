@@ -31,6 +31,10 @@ func main() {
 			Name:  "batch-run",
 			Usage: "Run batch test",
 			Flags: append(CommonFlags(), []cli.Flag{
+				cli.IntFlag{
+					Name:  "test_condition_number, c",
+					Usage: "Test condition number defined in the project batch run page",
+				},
 				cli.StringFlag{
 					Name:  "setting, s",
 					Usage: "Test setting in JSON format. Please check https://magic-pod.com/api/v1.0/doc/ for more detail",
@@ -135,15 +139,16 @@ func BatchRunAction(c *cli.Context) error {
 	if err != nil {
 		return err
 	}
+	testConditionNumber := c.Int("test_condition_number")
 	setting := c.String("setting")
-	if setting == "" {
-		return cli.NewExitError("--setting option is required", 1)
+	if testConditionNumber == 0 && setting == "" {
+		return cli.NewExitError("Either of --test_condition_number or --setting option is required", 1)
 	}
 	noWait := c.Bool("no_wait")
 	waitLimit := c.Int("wait_limit")
 
 	// send batch run start request
-	batchRuns, exitErr := StartBatchRun(urlBase, apiToken, organization, project, httpHeadersMap, setting)
+	batchRuns, exitErr := StartBatchRun(urlBase, apiToken, organization, project, httpHeadersMap, testConditionNumber, setting)
 	if exitErr != nil {
 		return exitErr
 	}
@@ -252,16 +257,28 @@ func BatchRunAction(c *cli.Context) error {
 	return nil
 }
 
-func StartBatchRun(urlBase string, apiToken string, organization string, project string, httpHeadersMap map[string]string, setting string) ([]BatchRun, *cli.ExitError) {
+func StartBatchRun(urlBase string, apiToken string, organization string, project string, httpHeadersMap map[string]string, testConditionNumber int, setting string) ([]BatchRun, *cli.ExitError) {
 	var testSettings interface{}
-	err := json.Unmarshal([]byte(setting), &testSettings)
-	isCrossBatchRunSetting := false
-	if err == nil {
-		testSettingsMap, ok := testSettings.(map[string]interface{})
-		if ok {
-			_, hasTestSettings := testSettingsMap["test_settings"]
-			_, hasTestConditionNumber := testSettingsMap["test_condition_number"]
-                        isCrossBatchRunSetting = hasTestSettings || hasTestConditionNumber
+	isCrossBatchRunSetting := (testConditionNumber != 0)
+	if setting == "" {
+		setting = "{\"test_condition_number\":" + strconv.Itoa(testConditionNumber) + "}"
+	} else {
+		err := json.Unmarshal([]byte(setting), &testSettings)
+		if err == nil {
+			testSettingsMap, ok := testSettings.(map[string]interface{})
+			if ok {
+				_, hasTestSettings := testSettingsMap["test_settings"]
+				testConditionNumberInJSON, hasTestConditionNumber := testSettingsMap["test_condition_number"]
+				if testConditionNumber != 0 {
+					if hasTestConditionNumber && testConditionNumber != testConditionNumberInJSON {
+						return []BatchRun{}, cli.NewExitError("--test_condition_number and --setting have different number", 1)
+					}
+					testSettingsMap["test_condition_number"] = testConditionNumber
+					settingBytes, _ := json.Marshal(testSettingsMap)
+					setting = string(settingBytes)
+				}
+				isCrossBatchRunSetting = isCrossBatchRunSetting || hasTestSettings || hasTestConditionNumber
+			}
 		}
 	}
 	if isCrossBatchRunSetting {
