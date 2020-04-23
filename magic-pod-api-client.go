@@ -259,7 +259,9 @@ func StartBatchRun(urlBase string, apiToken string, organization string, project
 	if err == nil {
 		testSettingsMap, ok := testSettings.(map[string]interface{})
 		if ok {
-			_, isCrossBatchRunSetting = testSettingsMap["test_settings"]
+			_, hasTestSettings := testSettingsMap["test_settings"]
+			_, hasTestConditionNumber := testSettingsMap["test_condition_number"]
+                        isCrossBatchRunSetting = hasTestSettings || hasTestConditionNumber
 		}
 	}
 	if isCrossBatchRunSetting {
