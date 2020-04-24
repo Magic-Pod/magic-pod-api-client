@@ -257,6 +257,28 @@ func BatchRunAction(c *cli.Context) error {
 	return nil
 }
 
+func MergeTestConditionNumberToSetting(testSettingsMap map[string]interface{}, hasTestSettings bool, testConditionNumber int) string {
+	testSettingsMap["test_condition_number"] = testConditionNumber
+
+	if !hasTestSettings {
+		// convert {\"model\":\"Nexus 5X\"} to {\"test_settings\":[{\"model\":\"Nexus 5X\"}]}
+		// so that it can be treated with test_condition_number
+		miscSettings := make(map[string]interface{})
+		for k, v := range testSettingsMap {
+			if k != "test_condition_number" && k != "concurrency" {
+				miscSettings[k] = v
+			}
+		}
+		if len(miscSettings) > 0 {
+			settingsArray := [...]map[string]interface{}{miscSettings}
+			testSettingsMap["test_settings"] = settingsArray
+		}
+	}
+
+	settingBytes, _ := json.Marshal(testSettingsMap)
+	return string(settingBytes)
+}
+
 func StartBatchRun(urlBase string, apiToken string, organization string, project string, httpHeadersMap map[string]string, testConditionNumber int, setting string) ([]BatchRun, *cli.ExitError) {
 	var testSettings interface{}
 	isCrossBatchRunSetting := (testConditionNumber != 0)
@@ -273,9 +295,7 @@ func StartBatchRun(urlBase string, apiToken string, organization string, project
 					if hasTestConditionNumber && testConditionNumber != testConditionNumberInJSON {
 						return []BatchRun{}, cli.NewExitError("--test_condition_number and --setting have different number", 1)
 					}
-					testSettingsMap["test_condition_number"] = testConditionNumber
-					settingBytes, _ := json.Marshal(testSettingsMap)
-					setting = string(settingBytes)
+					setting = MergeTestConditionNumberToSetting(testSettingsMap, hasTestSettings, testConditionNumber)
 				}
 				isCrossBatchRunSetting = isCrossBatchRunSetting || hasTestSettings || hasTestConditionNumber
 			}
