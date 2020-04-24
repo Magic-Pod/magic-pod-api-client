@@ -24,7 +24,7 @@ export MAGIC_POD_API_TOKEN=<API token displayed on https://magic-pod.com/account
 export MAGIC_POD_ORGANIZATION=<organization>
 export MAGIC_POD_PROJECT=<project>
 FILE_NO=$(./magic-pod-api-client upload-app -a <path to app/ipa/apk>)
-./magic-pod-api-client batch-run -s "{\"environment\":\"magic_pod\",\"os\":\"ios\",\"device_type\":\"simulator\",\"version\":\"13.1\",\"model\":\"iPhone 8\",\"app_type\":\"app_file\",\"app_file_number\":\"${FILE_NO}\"}"
+./magic-pod-api-client batch-run -c <test_condition_number> -s "{\"app_file_number\":\"${FILE_NO}\"}"
 if [ $? = 0 ]
 then
   ./magic-pod-api-client delete-app -a ${FILE_NO}
@@ -33,6 +33,13 @@ fi
 
 ### Run batch test for the app URL and return immediately
 
+When you have already defined a test condition on the project batch run page, the command is like below.
+```
+./magic-pod-api-client batch-run -n -t <API token displayed on https://magic-pod.com/accounts/api-token/> -o <organization> -p <project> -c <test_condition_number>
+```
+
+Or you can specify arbitrary settings.
+
 ```
 ./magic-pod-api-client batch-run -n -t <API token displayed on https://magic-pod.com/accounts/api-token/> -o <organization> -p <project> -s "{\"environment\":\"magic_pod\",\"os\":\"ios\",\"device_type\":\"simulator\",\"version\":\"13.1\",\"model\":\"iPhone 8\",\"app_type\":\"app_url\",\"app_url\":\"<URL to zipped app/ipa/apk>\"}"
 ```
@@ -40,20 +47,27 @@ fi
 ### Run a multi-device pattern for the app URL, and wait until all batch runs are finished
 
 ```
-./magic-pod-api-client batch-run -n -t <API token displayed on https://magic-pod.com/accounts/api-token/> -o <organization> -p <project> -s "{\"test_settings\":[{\"environment\":\"magic_pod\",\"os\":\"ios\",\"device_type\":\"simulator\",\"version\":\"13.1\",\"model\":\"iPhone 8\",\"app_type\":\"app_url\",\"app_url\":\"<URL to zipped app/ipa/apk>\"},{\"environment\":\"magic_pod\",\"os\":\"ios\",\"device_type\":\"simulator\",\"version\":\"13.1\",\"model\":\"iPhone X\",\"app_type\":\"app_url\",\"app_url\":\"<URL to zipped app/ipa/apk>\"}]\,\"concurrency\": 1}"
+./magic-pod-api-client batch-run -t <API token displayed on https://magic-pod.com/accounts/api-token/> -o <organization> -p <project> -c <test_condition_number>
 ```
 
-### Run 2 batch tests for different app URLs in parallel, and wait until all batch runs are finished
+Or
+
+```
+./magic-pod-api-client batch-run -t <API token displayed on https://magic-pod.com/accounts/api-token/> -o <organization> -p <project> -s "{\"test_settings\":[{\"environment\":\"magic_pod\",\"os\":\"ios\",\"device_type\":\"simulator\",\"version\":\"13.1\",\"model\":\"iPhone 8\",\"app_type\":\"app_url\",\"app_url\":\"<URL to zipped app/ipa/apk>\"},{\"environment\":\"magic_pod\",\"os\":\"ios\",\"device_type\":\"simulator\",\"version\":\"13.1\",\"model\":\"iPhone X\",\"app_type\":\"app_url\",\"app_url\":\"<URL to zipped app/ipa/apk>\"}]\,\"concurrency\": 1}"
+```
+
+You can execute the tests in parallel by settings `concurrency` a number greater than 1.
+
+### Run 2 batch tests for different projects in parallel, and wait until all batch runs are finished
 
 ```
 export MAGIC_POD_API_TOKEN=<API token displayed on https://magic-pod.com/accounts/api-token/>
 export MAGIC_POD_ORGANIZATION=<organization>
-export MAGIC_POD_PROJECT=<project>
 
-./magic-pod-api-client batch-run -s "{\"environment\":\"magic_pod\",\"os\":\"ios\",\"device_type\":\"simulator\",\"version\":\"13.1\",\"model\":\"iPhone 8\",\"app_type\":\"app_url\",\"app_url\":\"<URL1>\"}" &
+./magic-pod-api-client batch-run -p <project_1> -c <test_condition_number_1> &
 PID1=$!
 
-./magic-pod-api-client batch-run -s "{\"environment\":\"magic_pod\",\"os\":\"ios\",\"device_type\":\"simulator\",\"version\":\"13.1\",\"model\":\"iPhone 8\",\"app_type\":\"app_url\",\"app_url\":\"<URL2>\"}" &
+./magic-pod-api-client batch-run -p <project_2> -c <test_condition_number_2> &
 PID2=$!
 
 # return values of the wait commands will be magic-pod-api-client's return values.
