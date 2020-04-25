@@ -4,12 +4,9 @@ import (
 	"encoding/json"
 	"fmt"
 	"os"
-	"strconv"
-	"strings"
 	"time"
 
-	"github.com/go-resty/resty"
-	"github.com/mholt/archiver"
+	"github.com/Magic-Pod/magic-pod-api-client/common"
 	"github.com/urfave/cli"
 )
 
@@ -30,7 +27,7 @@ func main() {
 		{
 			Name:  "batch-run",
 			Usage: "Run batch test",
-			Flags: append(CommonFlags(), []cli.Flag{
+			Flags: append(commonFlags(), []cli.Flag{
 				cli.IntFlag{
 					Name:  "test_settings_number, S",
 					Usage: "Test settings number defined in the project batch run page",
@@ -48,58 +45,37 @@ func main() {
 					Usage: "Wait limit in seconds. If 0 is specified, the value is test count x 10 minutes",
 				},
 			}...),
-			Action: BatchRunAction,
+			Action: batchRunAction,
 		},
 		{
 			Name:  "upload-app",
 			Usage: "Upload app/ipa/apk file",
-			Flags: append(CommonFlags(), []cli.Flag{
+			Flags: append(commonFlags(), []cli.Flag{
 				cli.StringFlag{
 					Name:  "app_path, a",
 					Usage: "Path to the app/ipa/apk file to upload",
 				},
 			}...),
-			Action: UploadAppAction,
+			Action: uploadAppAction,
 		},
 		{
 			Name:  "delete-app",
 			Usage: "Deleted uploaded app/ipa/apk file",
-			Flags: append(CommonFlags(), []cli.Flag{
+			Flags: append(commonFlags(), []cli.Flag{
 				cli.IntFlag{
 					Name:  "app_file_number, a",
 					Usage: "File number of the uploaded file",
 				},
 			}...),
-			Action: DeleteAppAction,
+			Action: deleteAppAction,
 		},
 	}
 	app.Run(os.Args)
 }
 
-type BatchRun struct {
-	Url              string
-	Status           string
-	Batch_Run_Number int
-	Test_Cases       struct {
-		Succeeded 	int
-		Failed    	int
-		Aborted   	int
-		Unresolved	int
-		Total     	int
-	}
-}
-
-type CrossBatchRun struct {
-	Batch_Runs []BatchRun
-}
-
-type UploadFile struct {
-	File_No int
-}
-
-func UploadAppAction(c *cli.Context) error {
+func uploadAppAction(c *cli.Context) error {
 	// handle command line arguments
-	urlBase, apiToken, organization, project, httpHeadersMap, err := ParseCommonFlags(c)
+	urlBase, apiToken, organization, project, httpHeadersMap, err := parseCommonFlags(c)
 	if err != nil {
 		return err
 	}
@@ -108,7 +84,7 @@ func UploadAppAction(c *cli.Context) error {
 		return cli.NewExitError("--app_path option is required", 1)
 	}
 
-	fileNo, exitErr := UploadApp(urlBase, apiToken, organization, project, httpHeadersMap, appPath)
+	fileNo, exitErr := common.UploadApp(urlBase, apiToken, organization, project, httpHeadersMap, appPath)
 	if exitErr != nil {
 		return exitErr
 	}
@@ -116,9 +92,9 @@ func UploadAppAction(c *cli.Context) error {
 	return nil
 }
 
-func DeleteAppAction(c *cli.Context) error {
+func deleteAppAction(c *cli.Context) error {
 	// handle command line arguments
-	urlBase, apiToken, organization, project, httpHeadersMap, err := ParseCommonFlags(c)
+	urlBase, apiToken, organization, project, httpHeadersMap, err := parseCommonFlags(c)
 	if err != nil {
 		return err
 	}
@@ -126,16 +102,16 @@ func DeleteAppAction(c *cli.Context) error {
 	if appFileNumber == 0 {
 		return cli.NewExitError("--app_file_number option is not specified or 0", 1)
 	}
-	exitErr := DeleteApp(urlBase, apiToken, organization, project, httpHeadersMap, appFileNumber)
+	exitErr := common.DeleteApp(urlBase, apiToken, organization, project, httpHeadersMap, appFileNumber)
 	if exitErr != nil {
 		return exitErr
 	}
 	return nil
 }
 
-func BatchRunAction(c *cli.Context) error {
+func batchRunAction(c *cli.Context) error {
 	// handle command line arguments
-	urlBase, apiToken, organization, project, httpHeadersMap, err := ParseCommonFlags(c)
+	urlBase, apiToken, organization, project, httpHeadersMap, err := parseCommonFlags(c)
 	if err != nil {
 		return err
 	}
@@ -148,7 +124,7 @@ func BatchRunAction(c *cli.Context) error {
 	waitLimit := c.Int("wait_limit")
 
 	// send batch run start request
-	batchRuns, exitErr := StartBatchRun(urlBase, apiToken, organization, project, httpHeadersMap, testSettingsNumber, setting)
+	batchRuns, exitErr := common.StartBatchRun(urlBase, apiToken, organization, project, httpHeadersMap, testSettingsNumber, setting)
 	if exitErr != nil {
 		return exitErr
 	}
@@ -180,7 +156,7 @@ func BatchRunAction(c *cli.Context) error {
 		fmt.Printf("\n#%d wait until %d tests to be finished.. \n", batchRun.Batch_Run_Number, batchRun.Test_Cases.Total)
 		prevFinished := 0
 		for {
-			batchRun, exitErr := GetBatchRun(urlBase, apiToken, organization, project, httpHeadersMap, batchRun.Batch_Run_Number)
+			batchRun, exitErr := common.GetBatchRun(urlBase, apiToken, organization, project, httpHeadersMap, batchRun.Batch_Run_Number)
 			if exitErr != nil {
 				fmt.Print(exitErr)
 				existsErr = true
@@ -257,155 +233,7 @@ func BatchRunAction(c *cli.Context) error {
 	return nil
 }
 
-func MergeTestSettingsNumberToSetting(testSettingsMap map[string]interface{}, hasTestSettings bool, testSettingsNumber int) string {
-	testSettingsMap["test_settings_number"] = testSettingsNumber
-
-	if !hasTestSettings {
-		// convert {\"model\":\"Nexus 5X\"} to {\"test_settings\":[{\"model\":\"Nexus 5X\"}]}
-		// so that it can be treated with test_settings_number
-		miscSettings := make(map[string]interface{})
-		keysToDelete := []string{}
-		for k, v := range testSettingsMap {
-			if k != "test_settings_number" && k != "concurrency" {
-				miscSettings[k] = v
-				keysToDelete = append(keysToDelete, k)
-			}
-		}
-		for k := range keysToDelete {
-			delete(testSettingsMap, keysToDelete[k])
-		}
-		if len(miscSettings) > 0 {
-			settingsArray := [...]map[string]interface{}{miscSettings}
-			testSettingsMap["test_settings"] = settingsArray
-		}
-	}
-
-	settingBytes, _ := json.Marshal(testSettingsMap)
-	return string(settingBytes)
-}
-
-func StartBatchRun(urlBase string, apiToken string, organization string, project string, httpHeadersMap map[string]string, testSettingsNumber int, setting string) ([]BatchRun, *cli.ExitError) {
-	var testSettings interface{}
-	isCrossBatchRunSetting := (testSettingsNumber != 0)
-	if setting == "" {
-		setting = "{\"test_settings_number\":" + strconv.Itoa(testSettingsNumber) + "}"
-	} else {
-		err := json.Unmarshal([]byte(setting), &testSettings)
-		if err == nil {
-			testSettingsMap, ok := testSettings.(map[string]interface{})
-			if ok {
-				_, hasTestSettings := testSettingsMap["test_settings"]
-				testSettingsNumberInJSON, hastestSettingsNumber := testSettingsMap["test_settings_number"]
-				if testSettingsNumber != 0 {
-					if hastestSettingsNumber && testSettingsNumber != testSettingsNumberInJSON {
-						return []BatchRun{}, cli.NewExitError("--test_settings_number and --setting have different number", 1)
-					}
-					setting = MergeTestSettingsNumberToSetting(testSettingsMap, hasTestSettings, testSettingsNumber)
-				}
-				isCrossBatchRunSetting = isCrossBatchRunSetting || hasTestSettings || hastestSettingsNumber
-			}
-		}
-	}
-	if isCrossBatchRunSetting {
-		res, err := CreateBaseRequest(urlBase, apiToken, organization, project, httpHeadersMap).
-			SetHeader("Content-Type", "application/json").
-			SetBody(setting).
-			SetResult(CrossBatchRun{}).
-			Post("/{organization}/{project}/cross-batch-run/")
-		if err != nil {
-			panic(err)
-		}
-		if exitErr := HandleError(res); exitErr != nil {
-			return []BatchRun{}, exitErr
-		}
-		crossBatchRun := res.Result().(*CrossBatchRun)
-		return crossBatchRun.Batch_Runs, nil
-	} else { // normal batch run
-		res, err := CreateBaseRequest(urlBase, apiToken, organization, project, httpHeadersMap).
-			SetHeader("Content-Type", "application/json").
-			SetBody(setting).
-			SetResult(BatchRun{}).
-			Post("/{organization}/{project}/batch-run/")
-		if err != nil {
-			panic(err)
-		}
-		if exitErr := HandleError(res); exitErr != nil {
-			return []BatchRun{}, exitErr
-		}
-		batchRun := res.Result().(*BatchRun)
-		return []BatchRun{*batchRun}, nil
-	}
-}
-
-func GetBatchRun(urlBase string, apiToken string, organization string, project string, httpHeadersMap map[string]string, batchRunNumber int) (*BatchRun, *cli.ExitError) {
-	res, err := CreateBaseRequest(urlBase, apiToken, organization, project, httpHeadersMap).
-		SetPathParams(map[string]string{
-			"batch_run_number": strconv.Itoa(batchRunNumber),
-		}).
-		SetResult(BatchRun{}).
-		Get("/{organization}/{project}/batch-run/{batch_run_number}/")
-	if err != nil {
-		panic(err)
-	}
-	if exitErr := HandleError(res); exitErr != nil {
-		return nil, exitErr
-	}
-	return res.Result().(*BatchRun), nil
-}
-
-func UploadApp(urlBase string, apiToken string, organization string, project string, httpHeadersMap map[string]string, appPath string) (int, *cli.ExitError) {
-	stat, err := os.Stat(appPath)
-	if err != nil {
-		return 0, cli.NewExitError(fmt.Sprintf("%s does not exist", appPath), 1)
-	}
-	var actualPath string
-	if stat.Mode().IsDir() {
-		if strings.HasSuffix(appPath, ".app") {
-			actualPath = ZipAppDir(appPath)
-		} else {
-			return 0, cli.NewExitError(fmt.Sprintf("%s is not file but direcoty.", appPath), 1)
-		}
-	} else {
-		actualPath = appPath
-	}
-	res, err := CreateBaseRequest(urlBase, apiToken, organization, project, httpHeadersMap).
-		SetFile("file", actualPath).
-		SetResult(UploadFile{}).
-		Post("/{organization}/{project}/upload-file/")
-	if err != nil {
-		panic(err)
-	}
-	if exitErr := HandleError(res); exitErr != nil {
-		return 0, exitErr
-	}
-	return res.Result().(*UploadFile).File_No, nil
-}
-
-func DeleteApp(urlBase string, apiToken string, organization string, project string, httpHeadersMap map[string]string, appFileNumber int) *cli.ExitError {
-	res, err := CreateBaseRequest(urlBase, apiToken, organization, project, httpHeadersMap).
-		SetBody(fmt.Sprintf("{\"app_file_number\":%d}", appFileNumber)).
-		Delete("/{organization}/{project}/delete-file/")
-	if err != nil {
-		panic(err)
-	}
-	if exitErr := HandleError(res); exitErr != nil {
-		return exitErr
-	}
-	return nil
-}
-
-func ZipAppDir(dirPath string) string {
-	zipPath := dirPath + ".zip"
-	if err := os.RemoveAll(zipPath); err != nil {
-		panic(err)
-	}
-	if err := archiver.Archive([]string{dirPath}, zipPath); err != nil {
-		panic(err)
-	}
-	return zipPath
-}
-
-func CommonFlags() []cli.Flag {
+func commonFlags() []cli.Flag {
 	return []cli.Flag{
 		cli.StringFlag{
 			Name:   "token, t",
@@ -423,13 +251,13 @@ func CommonFlags() []cli.Flag {
 			EnvVar: "MAGIC_POD_PROJECT",
 		},
 		cli.StringFlag{
-			Name:   "http_headers, H",
-			Usage:  "Additional HTTP headers in JSON string format",
+			Name:  "http_headers, H",
+			Usage: "Additional HTTP headers in JSON string format",
 		},
 	}
 }
 
-func ParseCommonFlags(c *cli.Context) (string, string, string, string, map[string]string, error) {
+func parseCommonFlags(c *cli.Context) (string, string, string, string, map[string]string, error) {
 	urlBase := c.GlobalString("url-base")
 	apiToken := c.String("token")
 	organization := c.String("organization")
@@ -455,24 +283,4 @@ func ParseCommonFlags(c *cli.Context) (string, string, string, string, map[strin
 		}
 	}
 	return urlBase, apiToken, organization, project, httpHeadersMap, err
-}
-
-func CreateBaseRequest(urlBase string, apiToken string, organization string, project string, httpHeadersMap map[string]string) *resty.Request {
-	client := resty.New()
-	return client.
-		SetHostURL(urlBase+"/api/v1.0").R().
-		SetHeader("Authorization", "Token "+string(apiToken)).
-		SetHeaders(httpHeadersMap).
-		SetPathParams(map[string]string{
-			"organization": organization,
-			"project":      project,
-		})
-}
-
-func HandleError(resp *resty.Response) *cli.ExitError {
-	if resp.StatusCode() != 200 {
-		return cli.NewExitError(fmt.Sprintf("%s: %s", resp.Status(), resp.String()), 1)
-	} else {
-		return nil
-	}
 }
