@@ -32,8 +32,8 @@ func main() {
 			Usage: "Run batch test",
 			Flags: append(CommonFlags(), []cli.Flag{
 				cli.IntFlag{
-					Name:  "test_condition_number, c",
-					Usage: "Test condition number defined in the project batch run page",
+					Name:  "test_settings_number, S",
+					Usage: "Test settings number defined in the project batch run page",
 				},
 				cli.StringFlag{
 					Name:  "setting, s",
@@ -139,16 +139,16 @@ func BatchRunAction(c *cli.Context) error {
 	if err != nil {
 		return err
 	}
-	testConditionNumber := c.Int("test_condition_number")
+	testSettingsNumber := c.Int("test_settings_number")
 	setting := c.String("setting")
-	if testConditionNumber == 0 && setting == "" {
-		return cli.NewExitError("Either of --test_condition_number or --setting option is required", 1)
+	if testSettingsNumber == 0 && setting == "" {
+		return cli.NewExitError("Either of --test_settings_number or --setting option is required", 1)
 	}
 	noWait := c.Bool("no_wait")
 	waitLimit := c.Int("wait_limit")
 
 	// send batch run start request
-	batchRuns, exitErr := StartBatchRun(urlBase, apiToken, organization, project, httpHeadersMap, testConditionNumber, setting)
+	batchRuns, exitErr := StartBatchRun(urlBase, apiToken, organization, project, httpHeadersMap, testSettingsNumber, setting)
 	if exitErr != nil {
 		return exitErr
 	}
@@ -257,17 +257,22 @@ func BatchRunAction(c *cli.Context) error {
 	return nil
 }
 
-func MergeTestConditionNumberToSetting(testSettingsMap map[string]interface{}, hasTestSettings bool, testConditionNumber int) string {
-	testSettingsMap["test_condition_number"] = testConditionNumber
+func MergeTestSettingsNumberToSetting(testSettingsMap map[string]interface{}, hasTestSettings bool, testSettingsNumber int) string {
+	testSettingsMap["test_settings_number"] = testSettingsNumber
 
 	if !hasTestSettings {
 		// convert {\"model\":\"Nexus 5X\"} to {\"test_settings\":[{\"model\":\"Nexus 5X\"}]}
-		// so that it can be treated with test_condition_number
+		// so that it can be treated with test_settings_number
 		miscSettings := make(map[string]interface{})
+		keysToDelete := []string{}
 		for k, v := range testSettingsMap {
-			if k != "test_condition_number" && k != "concurrency" {
+			if k != "test_settings_number" && k != "concurrency" {
 				miscSettings[k] = v
+				keysToDelete = append(keysToDelete, k)
 			}
+		}
+		for k := range keysToDelete {
+			delete(testSettingsMap, keysToDelete[k])
 		}
 		if len(miscSettings) > 0 {
 			settingsArray := [...]map[string]interface{}{miscSettings}
@@ -279,25 +284,25 @@ func MergeTestConditionNumberToSetting(testSettingsMap map[string]interface{}, h
 	return string(settingBytes)
 }
 
-func StartBatchRun(urlBase string, apiToken string, organization string, project string, httpHeadersMap map[string]string, testConditionNumber int, setting string) ([]BatchRun, *cli.ExitError) {
+func StartBatchRun(urlBase string, apiToken string, organization string, project string, httpHeadersMap map[string]string, testSettingsNumber int, setting string) ([]BatchRun, *cli.ExitError) {
 	var testSettings interface{}
-	isCrossBatchRunSetting := (testConditionNumber != 0)
+	isCrossBatchRunSetting := (testSettingsNumber != 0)
 	if setting == "" {
-		setting = "{\"test_condition_number\":" + strconv.Itoa(testConditionNumber) + "}"
+		setting = "{\"test_settings_number\":" + strconv.Itoa(testSettingsNumber) + "}"
 	} else {
 		err := json.Unmarshal([]byte(setting), &testSettings)
 		if err == nil {
 			testSettingsMap, ok := testSettings.(map[string]interface{})
 			if ok {
 				_, hasTestSettings := testSettingsMap["test_settings"]
-				testConditionNumberInJSON, hasTestConditionNumber := testSettingsMap["test_condition_number"]
-				if testConditionNumber != 0 {
-					if hasTestConditionNumber && testConditionNumber != testConditionNumberInJSON {
-						return []BatchRun{}, cli.NewExitError("--test_condition_number and --setting have different number", 1)
+				testSettingsNumberInJSON, hastestSettingsNumber := testSettingsMap["test_settings_number"]
+				if testSettingsNumber != 0 {
+					if hastestSettingsNumber && testSettingsNumber != testSettingsNumberInJSON {
+						return []BatchRun{}, cli.NewExitError("--test_settings_number and --setting have different number", 1)
 					}
-					setting = MergeTestConditionNumberToSetting(testSettingsMap, hasTestSettings, testConditionNumber)
+					setting = MergeTestSettingsNumberToSetting(testSettingsMap, hasTestSettings, testSettingsNumber)
 				}
-				isCrossBatchRunSetting = isCrossBatchRunSetting || hasTestSettings || hasTestConditionNumber
+				isCrossBatchRunSetting = isCrossBatchRunSetting || hasTestSettings || hastestSettingsNumber
 			}
 		}
 	}
