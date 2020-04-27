@@ -6,6 +6,7 @@ import (
 	"os"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/go-resty/resty"
 	"github.com/mholt/archiver"
@@ -206,4 +207,120 @@ func DeleteApp(urlBase string, apiToken string, organization string, project str
 		return exitErr
 	}
 	return nil
+}
+
+func printMessage(printResult bool, format string, args ...interface{}) {
+	if printResult {
+		fmt.Printf(format, args...)
+	}
+}
+
+// ExecuteBatchRun starts batch run(s) and wait for its completion with showing progress
+func ExecuteBatchRun(urlBase string, apiToken string, organization string, project string,
+	httpHeadersMap map[string]string, testSettingsNumber int, setting string,
+	waitForResult bool, waitLimit int, printResult bool) ([]BatchRun, bool, bool, *cli.ExitError) {
+	// send batch run start request
+	batchRuns, exitErr := StartBatchRun(urlBase, apiToken, organization, project, httpHeadersMap, testSettingsNumber, setting)
+	if exitErr != nil {
+		return nil, false, false, exitErr
+	}
+
+	crossBatchRunTotalTestCount := 0
+	printMessage(printResult, "test result page:\n")
+	for _, batchRun := range batchRuns {
+		printMessage(printResult, "%s\n", batchRun.Url)
+		crossBatchRunTotalTestCount += batchRun.Test_Cases.Total
+	}
+
+	// finish before the test finish
+	if !waitForResult {
+		return batchRuns, false, false, nil
+	}
+
+	const initRetryInterval = 10 // retry more frequently at first
+	const retryInterval = 60
+	var limitSeconds int
+	if waitLimit == 0 {
+		limitSeconds = crossBatchRunTotalTestCount * 10 * 60 // wait up to test count x 10 minutes by default
+	} else {
+		limitSeconds = waitLimit
+	}
+	passedSeconds := 0
+	existsErr := false
+	existsUnresolved := false
+	for _, batchRun := range batchRuns {
+		printMessage(printResult, "\n#%d wait until %d tests to be finished.. \n", batchRun.Batch_Run_Number, batchRun.Test_Cases.Total)
+		prevFinished := 0
+		for {
+			batchRun, exitErr := GetBatchRun(urlBase, apiToken, organization, project, httpHeadersMap, batchRun.Batch_Run_Number)
+			if exitErr != nil {
+				if printResult {
+					fmt.Print(exitErr)
+				}
+				existsErr = true
+				break // give up the wait here
+			}
+			finished := batchRun.Test_Cases.Succeeded + batchRun.Test_Cases.Failed + batchRun.Test_Cases.Aborted + batchRun.Test_Cases.Unresolved
+			printMessage(printResult, ".") // show progress to prevent "long time no output" error on CircleCI etc
+			// output progress
+			if finished != prevFinished {
+				notSuccessfulCount := ""
+				if batchRun.Test_Cases.Failed > 0 {
+					notSuccessfulCount = fmt.Sprintf("%d failed", batchRun.Test_Cases.Failed)
+				}
+				if batchRun.Test_Cases.Unresolved > 0 {
+					if notSuccessfulCount != "" {
+						notSuccessfulCount += ", "
+					}
+					notSuccessfulCount += fmt.Sprintf("%d unresolved", batchRun.Test_Cases.Unresolved)
+				}
+				if notSuccessfulCount != "" {
+					notSuccessfulCount = fmt.Sprintf(" (%s)", notSuccessfulCount)
+				}
+				printMessage(printResult, "%d/%d finished%s\n", finished, batchRun.Test_Cases.Total, notSuccessfulCount)
+				prevFinished = finished
+			}
+			if batchRun.Status != "running" {
+				if batchRun.Test_Cases.Unresolved > 0 {
+					existsUnresolved = true
+				}
+				if batchRun.Status == "succeeded" {
+					printMessage(printResult, "batch run succeeded\n")
+					break
+				} else if batchRun.Status == "failed" {
+					if batchRun.Test_Cases.Failed > 0 {
+						unresolved := ""
+						if existsUnresolved {
+							unresolved = fmt.Sprintf(", %d unresolved", batchRun.Test_Cases.Unresolved)
+						}
+						printMessage(printResult, "batch run failed (%d failed%s)\n", batchRun.Test_Cases.Failed, unresolved)
+					} else {
+						printMessage(printResult, "batch run failed\n")
+					}
+					existsErr = true
+					break
+				} else if batchRun.Status == "unresolved" {
+					printMessage(printResult, "batch run unresolved (%d unresolved)\n", batchRun.Test_Cases.Unresolved)
+					break
+				} else if batchRun.Status == "aborted" {
+					printMessage(printResult, "batch run aborted\n")
+					existsErr = true
+					break
+				} else {
+					panic(batchRun.Status)
+				}
+			}
+			if passedSeconds > limitSeconds {
+				return batchRuns, existsErr, existsUnresolved, cli.NewExitError("batch run never finished", 1)
+			}
+			if passedSeconds < 120 {
+				time.Sleep(initRetryInterval * time.Second)
+				passedSeconds += initRetryInterval
+			} else {
+				time.Sleep(retryInterval * time.Second)
+				passedSeconds += retryInterval
+			}
+		}
+	}
+	return batchRuns, existsErr, existsUnresolved, nil
 }

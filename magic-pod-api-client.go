@@ -4,7 +4,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"os"
-	"time"
 
 	"github.com/Magic-Pod/magic-pod-api-client/common"
 	"github.com/urfave/cli"
@@ -123,106 +122,10 @@ func batchRunAction(c *cli.Context) error {
 	noWait := c.Bool("no_wait")
 	waitLimit := c.Int("wait_limit")
 
-	// send batch run start request
-	batchRuns, exitErr := common.StartBatchRun(urlBase, apiToken, organization, project, httpHeadersMap, testSettingsNumber, setting)
-	if exitErr != nil {
-		return exitErr
-	}
-
-	crossBatchRunTotalTestCount := 0
-	fmt.Print("test result page:\n")
-	for _, batchRun := range batchRuns {
-		fmt.Printf("%s\n", batchRun.Url)
-		crossBatchRunTotalTestCount += batchRun.Test_Cases.Total
-	}
-
-	// finish before the test finish
-	if noWait {
-		return nil
-	}
-
-	const initRetryInterval = 10 // retry more frequently at first
-	const retryInterval = 60
-	var limitSeconds int
-	if waitLimit == 0 {
-		limitSeconds = crossBatchRunTotalTestCount * 10 * 60 // wait up to test count x 10 minutes by default
-	} else {
-		limitSeconds = waitLimit
-	}
-	passedSeconds := 0
-	existsErr := false
-	existsUnresolved := false
-	for _, batchRun := range batchRuns {
-		fmt.Printf("\n#%d wait until %d tests to be finished.. \n", batchRun.Batch_Run_Number, batchRun.Test_Cases.Total)
-		prevFinished := 0
-		for {
-			batchRun, exitErr := common.GetBatchRun(urlBase, apiToken, organization, project, httpHeadersMap, batchRun.Batch_Run_Number)
-			if exitErr != nil {
-				fmt.Print(exitErr)
-				existsErr = true
-				break // give up the wait here
-			}
-			finished := batchRun.Test_Cases.Succeeded + batchRun.Test_Cases.Failed + batchRun.Test_Cases.Aborted + batchRun.Test_Cases.Unresolved
-			fmt.Printf(".") // show progress to prevent "long time no output" error on CircleCI etc
-			// output progress
-			if finished != prevFinished {
-				notSuccessfulCount := ""
-				if batchRun.Test_Cases.Failed > 0 {
-					notSuccessfulCount = fmt.Sprintf("%d failed", batchRun.Test_Cases.Failed)
-				}
-				if batchRun.Test_Cases.Unresolved > 0 {
-					if notSuccessfulCount != "" {
-						notSuccessfulCount += ", "
-					}
-					notSuccessfulCount += fmt.Sprintf("%d unresolved", batchRun.Test_Cases.Unresolved)
-				}
-				if notSuccessfulCount != "" {
-					notSuccessfulCount = fmt.Sprintf(" (%s)", notSuccessfulCount)
-				}
-				fmt.Printf("%d/%d finished%s\n", finished, batchRun.Test_Cases.Total, notSuccessfulCount)
-				prevFinished = finished
-			}
-			if batchRun.Status != "running" {
-				if batchRun.Test_Cases.Unresolved > 0 {
-					existsUnresolved = true
-				}
-				if batchRun.Status == "succeeded" {
-					fmt.Print("batch run succeeded\n")
-					break
-				} else if batchRun.Status == "failed" {
-					if batchRun.Test_Cases.Failed > 0 {
-						unresolved := ""
-						if existsUnresolved {
-							unresolved = fmt.Sprintf(", %d unresolved", batchRun.Test_Cases.Unresolved)
-						}
-						fmt.Printf("batch run failed (%d failed%s)\n", batchRun.Test_Cases.Failed, unresolved)
-					} else {
-						fmt.Print("batch run failed\n")
-					}
-					existsErr = true
-					break
-				} else if batchRun.Status == "unresolved" {
-					fmt.Printf("batch run unresolved (%d unresolved)\n", batchRun.Test_Cases.Unresolved)
-					break
-				} else if batchRun.Status == "aborted" {
-					fmt.Print("batch run aborted\n")
-					existsErr = true
-					break
-				} else {
-					panic(batchRun.Status)
-				}
-			}
-			if passedSeconds > limitSeconds {
-				return cli.NewExitError("batch run never finished", 1)
-			}
-			if passedSeconds < 120 {
-				time.Sleep(initRetryInterval * time.Second)
-				passedSeconds += initRetryInterval
-			} else {
-				time.Sleep(retryInterval * time.Second)
-				passedSeconds += retryInterval
-			}
-		}
+	_, existsErr, existsUnresolved, err := common.ExecuteBatchRun(urlBase, apiToken, organization,
+		project, httpHeadersMap, testSettingsNumber, setting, !noWait, waitLimit, true)
+	if err != nil {
+		return err
 	}
 	if existsErr {
 		return cli.NewExitError("", 1)
