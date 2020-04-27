@@ -135,14 +135,14 @@ func StartBatchRun(urlBase string, apiToken string, organization string, project
 			testSettingsMap, ok := testSettings.(map[string]interface{})
 			if ok {
 				_, hasTestSettings := testSettingsMap["test_settings"]
-				testSettingsNumberInJSON, hastestSettingsNumber := testSettingsMap["test_settings_number"]
+				testSettingsNumberInJSON, hasTestSettingsNumber := testSettingsMap["test_settings_number"]
 				if testSettingsNumber != 0 {
-					if hastestSettingsNumber && testSettingsNumber != testSettingsNumberInJSON {
+					if hasTestSettingsNumber && testSettingsNumber != testSettingsNumberInJSON {
 						return []BatchRun{}, cli.NewExitError("--test_settings_number and --setting have different number", 1)
 					}
 					setting = mergeTestSettingsNumberToSetting(testSettingsMap, hasTestSettings, testSettingsNumber)
 				}
-				isCrossBatchRunSetting = isCrossBatchRunSetting || hasTestSettings || hastestSettingsNumber
+				isCrossBatchRunSetting = isCrossBatchRunSetting || hasTestSettings || hasTestSettingsNumber
 			}
 		}
 	}
