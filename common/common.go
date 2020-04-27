@@ -248,7 +248,7 @@ func ExecuteBatchRun(urlBase string, apiToken string, organization string, proje
 	passedSeconds := 0
 	existsErr := false
 	existsUnresolved := false
-	for _, batchRun := range batchRuns {
+	for key, batchRun := range batchRuns {
 		printMessage(printResult, "\n#%d wait until %d tests to be finished.. \n", batchRun.Batch_Run_Number, batchRun.Test_Cases.Total)
 		prevFinished := 0
 		for {
@@ -260,6 +260,7 @@ func ExecuteBatchRun(urlBase string, apiToken string, organization string, proje
 				existsErr = true
 				break // give up the wait here
 			}
+			batchRuns[key] = *batchRun
 			finished := batchRun.Test_Cases.Succeeded + batchRun.Test_Cases.Failed + batchRun.Test_Cases.Aborted + batchRun.Test_Cases.Unresolved
 			printMessage(printResult, ".") // show progress to prevent "long time no output" error on CircleCI etc
 			// output progress
