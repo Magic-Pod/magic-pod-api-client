@@ -59,7 +59,7 @@ func main() {
 		},
 		{
 			Name:  "delete-app",
-			Usage: "Deleted uploaded app/ipa/apk file",
+			Usage: "Delete uploaded app/ipa/apk file",
 			Flags: append(commonFlags(), []cli.Flag{
 				cli.IntFlag{
 					Name:  "app_file_number, a",
