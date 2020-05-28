@@ -3,6 +3,7 @@ package common
 import (
 	"encoding/json"
 	"fmt"
+	"io/ioutil"
 	"os"
 	"strconv"
 	"strings"
@@ -205,6 +206,32 @@ func DeleteApp(urlBase string, apiToken string, organization string, project str
 	}
 	if exitErr := handleError(res); exitErr != nil {
 		return exitErr
+	}
+	return nil
+}
+
+func GetScreenshots(urlBase string, apiToken string, organization string, project string, httpHeadersMap map[string]string, batchRunNumber int, downloadPath string) error {
+	res, err := createBaseRequest(urlBase, apiToken, organization, project, httpHeadersMap).
+		SetPathParams(map[string]string{
+			"batch_run_number": strconv.Itoa(batchRunNumber),
+		}).
+		SetOutput(downloadPath).
+		Get("/{organization}/{project}/batch-runs/{batch_run_number}/screenshots/")
+	if err != nil {
+		panic(err)
+	}
+	if res.StatusCode() != 200 {
+		// response body is included not in res but in downloadPath file,
+		responseText, err := ioutil.ReadFile(downloadPath)
+		if err != nil {
+			panic(err)
+		}
+		// remove downloadPath since it contains not zip contents but just error information
+		err = os.Remove(downloadPath)
+		if err != nil {
+			panic(err)
+		}
+		return cli.NewExitError(fmt.Sprintf("%s: %s", res.Status(), responseText), 1)
 	}
 	return nil
 }

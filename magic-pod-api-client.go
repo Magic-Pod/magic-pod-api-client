@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"os"
+	"path/filepath"
 
 	"github.com/Magic-Pod/magic-pod-api-client/common"
 	"github.com/urfave/cli"
@@ -68,6 +69,21 @@ func main() {
 			}...),
 			Action: deleteAppAction,
 		},
+		{
+			Name:  "get-screenshots",
+			Usage: "Download screenshots for a batch run",
+			Flags: append(commonFlags(), []cli.Flag{
+				cli.IntFlag{
+					Name:  "batch_run_number, b",
+					Usage: "Batch run number",
+				},
+				cli.StringFlag{
+					Name:  "download_path, d",
+					Usage: "Download destination file path. If empty string is speficied, the path will be ./screenshots.zip",
+				},
+			}...),
+			Action: getScrenshotsAction,
+		},
 	}
 	app.Run(os.Args)
 }
@@ -102,6 +118,44 @@ func deleteAppAction(c *cli.Context) error {
 		return cli.NewExitError("--app_file_number option is not specified or 0", 1)
 	}
 	exitErr := common.DeleteApp(urlBase, apiToken, organization, project, httpHeadersMap, appFileNumber)
+	if exitErr != nil {
+		return exitErr
+	}
+	return nil
+}
+
+func getScrenshotsAction(c *cli.Context) error {
+	// handle command line arguments
+	urlBase, apiToken, organization, project, httpHeadersMap, err := parseCommonFlags(c)
+	if err != nil {
+		return err
+	}
+	batchRunNumber := c.Int("batch_run_number")
+	if batchRunNumber == 0 {
+		return cli.NewExitError("--batch_run_number option is not specified or 0", 1)
+	}
+	downloadPath := c.String("download_path")
+	if downloadPath == "" {
+		curDir, err := os.Getwd()
+		if err != nil {
+			panic(err)
+		}
+		downloadPath = filepath.Join(curDir, "screenshots.zip")
+	} else {
+		stat, err := os.Stat(downloadPath)
+		if err == nil {
+			// downloadPath already exists
+			mode := stat.Mode()
+			if mode.IsDir() {
+				return cli.NewExitError(fmt.Sprintf("'%s' should be not a directory but a file", downloadPath), 1)
+			}
+		}
+	}
+	downloadPath, err = filepath.Abs(downloadPath)
+	if err != nil {
+		panic(err)
+	}
+	exitErr := common.GetScreenshots(urlBase, apiToken, organization, project, httpHeadersMap, batchRunNumber, downloadPath)
 	if exitErr != nil {
 		return exitErr
 	}
