@@ -48,6 +48,12 @@ func main() {
 			Action: batchRunAction,
 		},
 		{
+			Name:   "latest-batch-run-no",
+			Usage:  "Get the latest batch run number",
+			Flags:  commonFlags(),
+			Action: latestBatchRunNoAction,
+		},
+		{
 			Name:  "upload-app",
 			Usage: "Upload app/ipa/apk file",
 			Flags: append(commonFlags(), []cli.Flag{
@@ -86,6 +92,21 @@ func main() {
 		},
 	}
 	app.Run(os.Args)
+}
+
+func latestBatchRunNoAction(c *cli.Context) error {
+	// handle command line arguments
+	urlBase, apiToken, organization, project, httpHeadersMap, err := parseCommonFlags(c)
+	if err != nil {
+		return err
+	}
+
+	batchRunNo, exitErr := common.LatestBatchRunNo(urlBase, apiToken, organization, project, httpHeadersMap)
+	if exitErr != nil {
+		return exitErr
+	}
+	fmt.Printf("%d\n", batchRunNo)
+	return nil
 }
 
 func uploadAppAction(c *cli.Context) error {

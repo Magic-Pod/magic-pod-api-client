@@ -28,8 +28,8 @@ type BatchRun struct {
 	}
 }
 
-// CrossBatchRun stands for a group of batch runs executed on the server
-type CrossBatchRun struct {
+// BatchRuns stands for a group of batch runs executed on the server
+type BatchRuns struct {
 	Batch_Runs []BatchRun
 }
 
@@ -152,7 +152,7 @@ func StartBatchRun(urlBase string, apiToken string, organization string, project
 		res, err := createBaseRequest(urlBase, apiToken, organization, project, httpHeadersMap).
 			SetHeader("Content-Type", "application/json").
 			SetBody(setting).
-			SetResult(CrossBatchRun{}).
+			SetResult(BatchRuns{}).
 			Post("/{organization}/{project}/cross-batch-run/")
 		if err != nil {
 			panic(err)
@@ -160,8 +160,8 @@ func StartBatchRun(urlBase string, apiToken string, organization string, project
 		if exitErr := handleError(res); exitErr != nil {
 			return []BatchRun{}, exitErr
 		}
-		crossBatchRun := res.Result().(*CrossBatchRun)
-		return crossBatchRun.Batch_Runs, nil
+		batchRuns := res.Result().(*BatchRuns)
+		return batchRuns.Batch_Runs, nil
 	} else { // normal batch run
 		res, err := createBaseRequest(urlBase, apiToken, organization, project, httpHeadersMap).
 			SetHeader("Content-Type", "application/json").
@@ -194,6 +194,24 @@ func GetBatchRun(urlBase string, apiToken string, organization string, project s
 		return nil, exitErr
 	}
 	return res.Result().(*BatchRun), nil
+}
+
+func LatestBatchRunNo(urlBase string, apiToken string, organization string, project string, httpHeadersMap map[string]string) (int, *cli.ExitError) {
+	res, err := createBaseRequest(urlBase, apiToken, organization, project, httpHeadersMap).
+		SetQueryParam("count", "1").
+		SetResult(BatchRuns{}).
+		Get("/{organization}/{project}/batch-runs/")
+	if err != nil {
+		panic(err)
+	}
+	if exitErr := handleError(res); exitErr != nil {
+		return 0, exitErr
+	}
+	batchRuns := res.Result().(*BatchRuns).Batch_Runs
+	if len(batchRuns) == 0 {
+		return 0, cli.NewExitError("no batch run exists in this project", 1)
+	}
+	return batchRuns[0].Batch_Run_Number, nil
 }
 
 // DeleteApp deletes app/ipa/apk file on the server
