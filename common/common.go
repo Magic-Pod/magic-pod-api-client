@@ -228,11 +228,13 @@ func DeleteApp(urlBase string, apiToken string, organization string, project str
 	return nil
 }
 
-func GetScreenshots(urlBase string, apiToken string, organization string, project string, httpHeadersMap map[string]string, batchRunNumber int, downloadPath string) error {
+func GetScreenshots(urlBase string, apiToken string, organization string, project string, httpHeadersMap map[string]string, batchRunNumber int, downloadPath string, fileIndexType string, downloadType string) error {
 	res, err := createBaseRequest(urlBase, apiToken, organization, project, httpHeadersMap).
 		SetPathParams(map[string]string{
 			"batch_run_number": strconv.Itoa(batchRunNumber),
 		}).
+		SetQueryParam("file_index_type", fileIndexType).
+		SetQueryParam("download_type", downloadType).
 		SetOutput(downloadPath).
 		Get("/{organization}/{project}/batch-runs/{batch_run_number}/screenshots/")
 	if err != nil {

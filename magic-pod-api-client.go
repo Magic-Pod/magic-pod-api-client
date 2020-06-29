@@ -87,6 +87,14 @@ func main() {
 					Name:  "download_path, d",
 					Usage: "Download destination file path. If empty string is speficied, the path will be ./screenshots.zip",
 				},
+				cli.StringFlag{
+					Name:  "file_index_type, f",
+					Usage: "'line_number' or 'auto_increment'. If empty string is specified, the type will be 'line_number'",
+				},
+				cli.StringFlag{
+					Name:  "download_type, D",
+					Usage: "'all' or 'command_only' (i.e. screenshots only for 'Take screenshot' command). If empty string is specified, the type will be 'all'",
+				},
 			}...),
 			Action: getScrenshotsAction,
 		},
@@ -176,7 +184,15 @@ func getScrenshotsAction(c *cli.Context) error {
 	if err != nil {
 		panic(err)
 	}
-	exitErr := common.GetScreenshots(urlBase, apiToken, organization, project, httpHeadersMap, batchRunNumber, downloadPath)
+	fileIndexType := c.String("file_index_type")
+	if fileIndexType == "" {
+		fileIndexType = "line_number"
+	}
+	downloadType := c.String("download_type")
+	if downloadType == "" {
+		downloadType = "all"
+	}
+	exitErr := common.GetScreenshots(urlBase, apiToken, organization, project, httpHeadersMap, batchRunNumber, downloadPath, fileIndexType, downloadType)
 	if exitErr != nil {
 		return exitErr
 	}
