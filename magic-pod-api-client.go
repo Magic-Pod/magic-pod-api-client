@@ -88,12 +88,20 @@ func main() {
 					Usage: "Download destination file path. If empty string is speficied, the path will be ./screenshots.zip",
 				},
 				cli.StringFlag{
-					Name:  "file_index_type, f",
+					Name:  "file_index_type, i",
 					Usage: "'line_number' or 'auto_increment'. If empty string is specified, the type will be 'line_number'",
+				},
+				cli.StringFlag{
+					Name:  "file_name_body_type, B",
+					Usage: "'none' or 'screenshot_name'. If empty string is specified, the type will be 'none'",
 				},
 				cli.StringFlag{
 					Name:  "download_type, D",
 					Usage: "'all' or 'command_only' (i.e. screenshots only for 'Take screenshot' command). If empty string is specified, the type will be 'all'",
+				},
+				cli.BoolFlag{
+					Name:  "mask_dynamically_changed_area, m",
+					Usage: "Mask dynamically changed areas which can cause unexpected image difference between each test",
 				},
 			}...),
 			Action: getScrenshotsAction,
@@ -188,11 +196,16 @@ func getScrenshotsAction(c *cli.Context) error {
 	if fileIndexType == "" {
 		fileIndexType = "line_number"
 	}
+	fileNameBodyType := c.String("file_name_body_type")
+	if fileNameBodyType == "" {
+		fileNameBodyType = "none"
+	}
 	downloadType := c.String("download_type")
 	if downloadType == "" {
 		downloadType = "all"
 	}
-	exitErr := common.GetScreenshots(urlBase, apiToken, organization, project, httpHeadersMap, batchRunNumber, downloadPath, fileIndexType, downloadType)
+	maskDynamicallyChangedArea := c.Bool("mask_dynamically_changed_area")
+	exitErr := common.GetScreenshots(urlBase, apiToken, organization, project, httpHeadersMap, batchRunNumber, downloadPath, fileIndexType, fileNameBodyType, downloadType, maskDynamicallyChangedArea)
 	if exitErr != nil {
 		return exitErr
 	}

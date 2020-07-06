@@ -228,13 +228,21 @@ func DeleteApp(urlBase string, apiToken string, organization string, project str
 	return nil
 }
 
-func GetScreenshots(urlBase string, apiToken string, organization string, project string, httpHeadersMap map[string]string, batchRunNumber int, downloadPath string, fileIndexType string, downloadType string) error {
+func GetScreenshots(urlBase string, apiToken string, organization string, project string, httpHeadersMap map[string]string, batchRunNumber int, downloadPath string, fileIndexType string, fileNameBodyType string, downloadType string, maskDynamicallyChangedArea bool) error {
+	var maskDynamicallyChangedAreaStr string
+	if maskDynamicallyChangedArea {
+		maskDynamicallyChangedAreaStr = "true"
+	} else {
+		maskDynamicallyChangedAreaStr = "false"
+	}
 	res, err := createBaseRequest(urlBase, apiToken, organization, project, httpHeadersMap).
 		SetPathParams(map[string]string{
 			"batch_run_number": strconv.Itoa(batchRunNumber),
 		}).
 		SetQueryParam("file_index_type", fileIndexType).
+		SetQueryParam("file_name_body_type", fileNameBodyType).
 		SetQueryParam("download_type", downloadType).
+		SetQueryParam("mask_dynamically_changed_area", maskDynamicallyChangedAreaStr).
 		SetOutput(downloadPath).
 		Get("/{organization}/{project}/batch-runs/{batch_run_number}/screenshots/")
 	if err != nil {
