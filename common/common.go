@@ -152,7 +152,6 @@ func StartBatchRun(urlBase string, apiToken string, organization string, project
 		res, err := createBaseRequest(urlBase, apiToken, organization, project, httpHeadersMap).
 			SetHeader("Content-Type", "application/json").
 			SetBody(setting).
-			SetResult(BatchRuns{}).
 			Post("/{organization}/{project}/cross-batch-run/")
 		if err != nil {
 			panic(err)
@@ -160,8 +159,15 @@ func StartBatchRun(urlBase string, apiToken string, organization string, project
 		if exitErr := handleError(res); exitErr != nil {
 			return []BatchRun{}, exitErr
 		}
-		batchRuns := res.Result().(*BatchRuns)
-		return batchRuns.Batch_Runs, nil
+		// Temporal logic to handle old Magic-Pod API earlier than 0.65.0
+		batchRuns := BatchRuns{}
+		json.Unmarshal(res.Body(), &batchRuns)
+		if len(batchRuns.Batch_Runs) > 0 {
+			return batchRuns.Batch_Runs, nil	
+		}
+		batchRun := BatchRun{}
+		json.Unmarshal(res.Body(), &batchRun)
+		return []BatchRun{batchRun}, nil
 	} else { // normal batch run
 		res, err := createBaseRequest(urlBase, apiToken, organization, project, httpHeadersMap).
 			SetHeader("Content-Type", "application/json").
