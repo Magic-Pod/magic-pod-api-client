@@ -328,7 +328,7 @@ func ExecuteBatchRun(urlBase string, apiToken string, organization string, proje
 			if notSuccessfulCount != "" {
 				notSuccessfulCount = fmt.Sprintf(" (%s)", notSuccessfulCount)
 			}
-			printMessage(printResult, "%d/%d finished%s\n", finished, batchRunUnderProgress.Test_Cases.Total, notSuccessfulCount)
+			printMessage(printResult, "%d/%d finished%s\n", finished, batchRun.Test_Cases.Total, notSuccessfulCount)
 			prevFinished = finished
 		}
 		if batchRunUnderProgress.Status != "running" {
