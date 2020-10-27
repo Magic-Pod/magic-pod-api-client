@@ -226,7 +226,7 @@ func batchRunAction(c *cli.Context) error {
 	noWait := c.Bool("no_wait")
 	waitLimit := c.Int("wait_limit")
 
-	_, existsErr, existsUnresolved, batchRunError := common.ExecuteBatchRun(urlBase, apiToken, organization,
+	existsErr, existsUnresolved, batchRunError := common.ExecuteBatchRun(urlBase, apiToken, organization,
 		project, httpHeadersMap, testSettingsNumber, setting, !noWait, waitLimit, true)
 	if batchRunError != nil {
 		return batchRunError

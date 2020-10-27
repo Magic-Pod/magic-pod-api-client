@@ -279,11 +279,11 @@ func printMessage(printResult bool, format string, args ...interface{}) {
 // ExecuteBatchRun starts batch run(s) and wait for its completion with showing progress
 func ExecuteBatchRun(urlBase string, apiToken string, organization string, project string,
 	httpHeadersMap map[string]string, testSettingsNumber int, setting string,
-	waitForResult bool, waitLimit int, printResult bool) ([]BatchRun, bool, bool, *cli.ExitError) {
+	waitForResult bool, waitLimit int, printResult bool) (bool, bool, *cli.ExitError) {
 	// send batch run start request
 	batchRuns, exitErr := StartBatchRun(urlBase, apiToken, organization, project, httpHeadersMap, testSettingsNumber, setting)
 	if exitErr != nil {
-		return nil, false, false, exitErr
+		return false, false, exitErr
 	}
 
 	crossBatchRunTotalTestCount := 0
@@ -295,7 +295,7 @@ func ExecuteBatchRun(urlBase string, apiToken string, organization string, proje
 
 	// finish before the test finish
 	if !waitForResult {
-		return batchRuns, false, false, nil
+		return false, false, nil
 	}
 
 	const initRetryInterval = 10 // retry more frequently at first
@@ -373,7 +373,7 @@ func ExecuteBatchRun(urlBase string, apiToken string, organization string, proje
 				}
 			}
 			if passedSeconds > limitSeconds {
-				return batchRuns, existsErr, existsUnresolved, cli.NewExitError("batch run never finished", 1)
+				return existsErr, existsUnresolved, cli.NewExitError("batch run never finished", 1)
 			}
 			if passedSeconds < 120 {
 				time.Sleep(initRetryInterval * time.Second)
@@ -384,5 +384,5 @@ func ExecuteBatchRun(urlBase string, apiToken string, organization string, proje
 			}
 		}
 	}
-	return batchRuns, existsErr, existsUnresolved, nil
+	return existsErr, existsUnresolved, nil
 }
