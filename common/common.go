@@ -271,7 +271,7 @@ func printMessage(printResult bool, format string, args ...interface{}) {
 // ExecuteBatchRun starts batch run(s) and wait for its completion with showing progress
 func ExecuteBatchRun(urlBase string, apiToken string, organization string, project string,
 	httpHeadersMap map[string]string, testSettingsNumber int, setting string,
-	waitForResult bool, waitLimit int, printResult bool) (*BatchRun, bool, bool, *cli.ExitError) {
+	waitForResult bool, waitLimit int, printResult bool) (*BatchRun /*on which magic-pod bitrise step depends */, bool, bool, *cli.ExitError) {
 	// send batch run start request
 	batchRun, exitErr := StartBatchRun(urlBase, apiToken, organization, project, httpHeadersMap, testSettingsNumber, setting)
 	if exitErr != nil {
