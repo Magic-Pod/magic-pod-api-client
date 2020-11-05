@@ -126,7 +126,7 @@ func mergeTestSettingsNumberToSetting(testSettingsMap map[string]interface{}, ha
 }
 
 // StartBatchRun starts a batch run or a cross batch run on the server
-func StartBatchRun(urlBase string, apiToken string, organization string, project string, httpHeadersMap map[string]string, testSettingsNumber int, setting string) (BatchRun, *cli.ExitError) {
+func StartBatchRun(urlBase string, apiToken string, organization string, project string, httpHeadersMap map[string]string, testSettingsNumber int, setting string) (*BatchRun, *cli.ExitError) {
 	var testSettings interface{}
 	isCrossBatchRunSetting := (testSettingsNumber != 0)
 	if setting == "" {
@@ -140,7 +140,7 @@ func StartBatchRun(urlBase string, apiToken string, organization string, project
 				testSettingsNumberInJSON, hasTestSettingsNumber := testSettingsMap["test_settings_number"]
 				if testSettingsNumber != 0 {
 					if hasTestSettingsNumber && testSettingsNumber != testSettingsNumberInJSON {
-						return BatchRun{}, cli.NewExitError("--test_settings_number and --setting have different number", 1)
+						return nil, cli.NewExitError("--test_settings_number and --setting have different number", 1)
 					}
 					setting = mergeTestSettingsNumberToSetting(testSettingsMap, hasTestSettings, testSettingsNumber)
 				}
@@ -158,10 +158,9 @@ func StartBatchRun(urlBase string, apiToken string, organization string, project
 			panic(err)
 		}
 		if exitErr := handleError(res); exitErr != nil {
-			return BatchRun{}, exitErr
+			return nil, exitErr
 		}
-		batchRun := res.Result().(*BatchRun)
-		return *batchRun, nil
+		return res.Result().(*BatchRun), nil
 	} else { // normal batch run
 		res, err := createBaseRequest(urlBase, apiToken, organization, project, httpHeadersMap).
 			SetHeader("Content-Type", "application/json").
@@ -172,10 +171,9 @@ func StartBatchRun(urlBase string, apiToken string, organization string, project
 			panic(err)
 		}
 		if exitErr := handleError(res); exitErr != nil {
-			return BatchRun{}, exitErr
+			return nil, exitErr
 		}
-		batchRun := res.Result().(*BatchRun)
-		return *batchRun, nil
+		return res.Result().(*BatchRun), nil
 	}
 }
 
@@ -273,11 +271,11 @@ func printMessage(printResult bool, format string, args ...interface{}) {
 // ExecuteBatchRun starts batch run(s) and wait for its completion with showing progress
 func ExecuteBatchRun(urlBase string, apiToken string, organization string, project string,
 	httpHeadersMap map[string]string, testSettingsNumber int, setting string,
-	waitForResult bool, waitLimit int, printResult bool) (bool, bool, *cli.ExitError) {
+	waitForResult bool, waitLimit int, printResult bool) (*BatchRun, bool, bool, *cli.ExitError) {
 	// send batch run start request
 	batchRun, exitErr := StartBatchRun(urlBase, apiToken, organization, project, httpHeadersMap, testSettingsNumber, setting)
 	if exitErr != nil {
-		return false, false, exitErr
+		return nil, false, false, exitErr
 	}
 
 	crossBatchRunTotalTestCount := batchRun.Test_Cases.Total
@@ -286,7 +284,7 @@ func ExecuteBatchRun(urlBase string, apiToken string, organization string, proje
 
 	// finish before the test finish
 	if !waitForResult {
-		return false, false, nil
+		return batchRun, false, false, nil
 	}
 
 	const initRetryInterval = 10 // retry more frequently at first
@@ -362,7 +360,7 @@ func ExecuteBatchRun(urlBase string, apiToken string, organization string, proje
 			}
 		}
 		if passedSeconds > limitSeconds {
-			return existsErr, existsUnresolved, cli.NewExitError("batch run never finished", 1)
+			return batchRun, existsErr, existsUnresolved, cli.NewExitError("batch run never finished", 1)
 		}
 		if passedSeconds < 120 {
 			time.Sleep(initRetryInterval * time.Second)
@@ -372,5 +370,5 @@ func ExecuteBatchRun(urlBase string, apiToken string, organization string, proje
 			passedSeconds += retryInterval
 		}
 	}
-	return existsErr, existsUnresolved, nil
+	return batchRun, existsErr, existsUnresolved, nil
 }
